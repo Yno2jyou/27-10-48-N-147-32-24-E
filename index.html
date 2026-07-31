@@ -33,6 +33,9 @@ body.is-editing main#honbun.is-editing {
   touch-action: pan-x pan-y;
   -webkit-user-select: text;
   user-select: text;
+  /* キーボード＋自動入力バー分の余白（JSで上書き） */
+  padding-bottom: 40vh;
+  scroll-margin-bottom: 40vh;
 }
 
 body {
@@ -1452,11 +1455,12 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     return html;
   }
 
-  /* 編集中の画面固定（ピンチズーム抑止） */
+  /* 編集中の画面固定（ピンチズーム抑止）＋キーボード余白 */
   var _editViewportLocked = false;
   var _editGestureHandler = null;
   var _editTouchHandler = null;
   var _editViewportMetaContent = null;
+  var _editVvHandler = null;
 
   function lockEditViewport() {
     if (_editViewportLocked) return;
@@ -1477,6 +1481,26 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       if (e.touches && e.touches.length > 1) e.preventDefault();
     };
     document.addEventListener("touchmove", _editTouchHandler, { passive: false });
+
+    // キーボード＋自動入力バーの高さぶん本文下に余白を確保
+    function applyKeyboardInset() {
+      var main = document.querySelector("main#honbun.is-editing");
+      if (!main) return;
+      var inset = 0;
+      if (window.visualViewport) {
+        inset = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+      }
+      // 自動入力バー分を少し多めに（端末により 40〜72px 程度）
+      var pad = Math.max(inset + 56, Math.round(window.innerHeight * 0.28));
+      main.style.paddingBottom = pad + "px";
+    }
+    _editVvHandler = applyKeyboardInset;
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", _editVvHandler);
+      window.visualViewport.addEventListener("scroll", _editVvHandler);
+    }
+    window.addEventListener("resize", _editVvHandler);
+    applyKeyboardInset();
   }
 
   function unlockEditViewport() {
@@ -1497,6 +1521,30 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       document.removeEventListener("touchmove", _editTouchHandler);
       _editTouchHandler = null;
     }
+    if (_editVvHandler) {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", _editVvHandler);
+        window.visualViewport.removeEventListener("scroll", _editVvHandler);
+      }
+      window.removeEventListener("resize", _editVvHandler);
+      _editVvHandler = null;
+    }
+    var main = document.querySelector("main#honbun");
+    if (main) main.style.paddingBottom = "";
+  }
+
+  function applyAntiAutofill(el) {
+    if (!el) return;
+    el.setAttribute("autocomplete", "off");
+    el.setAttribute("autocorrect", "off");
+    el.setAttribute("autocapitalize", "off");
+    el.setAttribute("spellcheck", "false");
+    el.setAttribute("inputmode", "text");
+    el.setAttribute("data-lpignore", "true");
+    el.setAttribute("data-1p-ignore", "true");
+    el.setAttribute("data-bwignore", "true");
+    el.setAttribute("data-form-type", "other");
+    el.setAttribute("data-google-autofill", "disabled");
   }
 
   function enterInlineBodyEdit(work, opts) {
@@ -1659,27 +1707,12 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     document.body.classList.add("is-editing");
     main.setAttribute("contenteditable", "true");
     main.setAttribute("spellcheck", "false");
-    // Google / パスワードマネージャの自動入力バーを抑止
-    main.setAttribute("autocomplete", "off");
-    main.setAttribute("autocorrect", "off");
-    main.setAttribute("autocapitalize", "off");
-    main.setAttribute("inputmode", "text");
     main.setAttribute("role", "textbox");
     main.setAttribute("aria-multiline", "true");
     main.setAttribute("aria-autocomplete", "none");
-    main.setAttribute("data-lpignore", "true");
-    main.setAttribute("data-1p-ignore", "true");
-    main.setAttribute("data-bwignore", "true");
-    main.setAttribute("data-form-type", "other");
+    applyAntiAutofill(main);
     lockEditViewport();
-    // ツールバーの select / input も同様に抑止
-    toolbar.querySelectorAll("select, input, textarea, button").forEach(function (el) {
-      el.setAttribute("autocomplete", "off");
-      el.setAttribute("data-lpignore", "true");
-      el.setAttribute("data-1p-ignore", "true");
-      el.setAttribute("data-bwignore", "true");
-      el.setAttribute("data-form-type", "other");
-    });
+    toolbar.querySelectorAll("select, input, textarea, button").forEach(applyAntiAutofill);
 
     function onPaste(e) {
       e.preventDefault();
@@ -1796,17 +1829,18 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       document.body.classList.remove("is-editing");
       main.removeAttribute("contenteditable");
       main.removeAttribute("spellcheck");
+      main.removeAttribute("role");
+      main.removeAttribute("aria-multiline");
+      main.removeAttribute("aria-autocomplete");
       main.removeAttribute("autocomplete");
       main.removeAttribute("autocorrect");
       main.removeAttribute("autocapitalize");
       main.removeAttribute("inputmode");
-      main.removeAttribute("role");
-      main.removeAttribute("aria-multiline");
-      main.removeAttribute("aria-autocomplete");
       main.removeAttribute("data-lpignore");
       main.removeAttribute("data-1p-ignore");
       main.removeAttribute("data-bwignore");
       main.removeAttribute("data-form-type");
+      main.removeAttribute("data-google-autofill");
       main.removeEventListener("paste", onPaste);
       main.removeEventListener("drop", onDrop);
       unlockEditViewport();
@@ -1827,17 +1861,10 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         document.body.classList.add("is-editing");
         main.setAttribute("contenteditable", "true");
         main.setAttribute("spellcheck", "false");
-        main.setAttribute("autocomplete", "off");
-        main.setAttribute("autocorrect", "off");
-        main.setAttribute("autocapitalize", "off");
-        main.setAttribute("inputmode", "text");
         main.setAttribute("role", "textbox");
         main.setAttribute("aria-multiline", "true");
         main.setAttribute("aria-autocomplete", "none");
-        main.setAttribute("data-lpignore", "true");
-        main.setAttribute("data-1p-ignore", "true");
-        main.setAttribute("data-bwignore", "true");
-        main.setAttribute("data-form-type", "other");
+        applyAntiAutofill(main);
         main.addEventListener("paste", onPaste);
         main.addEventListener("drop", onDrop);
         lockEditViewport();
