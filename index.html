@@ -277,6 +277,39 @@ main p.no-indent { text-indent: 0; }
 .work-card-admin-btn:hover { background: rgba(154,139,122,0.16); color: var(--fg); }
 .work-page-admin-bar { text-align: center; margin-bottom: 12px; }
 
+
+/* ---------- Inline body editor ---------- */
+.inline-editor-wrap {
+  max-width: var(--max-width); margin: 0 auto; padding: 0 24px 40px;
+}
+.inline-editor-toolbar {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 14px 0 16px; margin-bottom: 12px;
+  background: linear-gradient(180deg, rgba(6,5,8,0.97) 70%, rgba(6,5,8,0.85) 100%);
+  border-bottom: 1px solid var(--line);
+}
+.inline-editor-toolbar .hint {
+  flex: 1 1 100%; font-family: var(--font-mono); font-size: 11px;
+  color: var(--fg-dim); letter-spacing: 0.06em; line-height: 1.7;
+}
+.inline-editor-toolbar .actions {
+  display: flex; gap: 10px; margin-left: auto;
+}
+#inline-body-editor {
+  width: 100%; min-height: 70vh; resize: vertical;
+  background: rgba(12,10,12,0.9); border: 1px solid var(--line);
+  color: var(--fg); border-radius: 2px;
+  padding: 28px 24px; font-family: var(--font-body); font-size: 15px;
+  line-height: 2.0; letter-spacing: 0.03em;
+  outline: none; white-space: pre-wrap;
+}
+#inline-body-editor:focus { border-color: var(--accent-soft); }
+@media (max-width: 520px) {
+  .inline-editor-wrap { padding: 0 12px 32px; }
+  #inline-body-editor { padding: 18px 14px; font-size: 14px; min-height: 60vh; }
+}
+
 </style>
 </head>
 <body>
@@ -960,18 +993,61 @@ main p.no-indent { text-indent: 0; }
 
     var bodyBtn = app.querySelector('[data-action="edit-work-body"]');
     if (bodyBtn) bodyBtn.addEventListener("click", function () {
-      openFormModal("「" + work.title + "」の本文を編集", [
-        {
-          key: "content",
-          label: "本文（ふつうの文章でOK）\n・空行で段落分け\n・章の区切りは行頭に「# タイトル」\n・「」で始まる行は字下げなし",
-          type: "textarea",
-          rows: 18,
-          value: contentToPlain(work.content)
-        }
-      ], function (result) {
-        result.content = plainToContent(result.content);
-        return saveWork(work.id, result);
-      });
+      enterInlineBodyEdit(work);
+    });
+  }
+
+  function enterInlineBodyEdit(work) {
+    var main = app.querySelector("#honbun");
+    if (!main) return;
+
+    // hide navs that interfere
+    app.querySelectorAll("nav.work-nav").forEach(function (n) { n.style.display = "none"; });
+    var adminBarEl = app.querySelector(".work-page-admin-bar");
+    if (adminBarEl) adminBarEl.style.display = "none";
+
+    var plain = contentToPlain(work.content);
+    var wrap = document.createElement("div");
+    wrap.className = "inline-editor-wrap";
+    wrap.id = "inline-editor-root";
+    wrap.innerHTML =
+      '<div class="inline-editor-toolbar">' +
+      '<div class="hint">本文を編集中 — 空行で段落、行頭「# タイトル」で章立て、「」始まりは字下げなし。HTMLタグは不要です。</div>' +
+      '<div class="actions">' +
+      '<button type="button" class="btn" data-cancel>キャンセル</button>' +
+      '<button type="button" class="btn primary" data-save>保存</button>' +
+      '</div></div>' +
+      '<textarea id="inline-body-editor" spellcheck="false"></textarea>';
+
+    main.replaceWith(wrap);
+    var ta = wrap.querySelector("#inline-body-editor");
+    ta.value = plain;
+    ta.focus();
+    // place caret at top
+    ta.setSelectionRange(0, 0);
+    window.scrollTo(0, 0);
+
+    var saveBtn = wrap.querySelector("[data-save]");
+    var cancelBtn = wrap.querySelector("[data-cancel]");
+
+    cancelBtn.addEventListener("click", function () {
+      refresh();
+    });
+
+    saveBtn.addEventListener("click", async function () {
+      saveBtn.textContent = "保存中...";
+      saveBtn.disabled = true;
+      cancelBtn.disabled = true;
+      try {
+        var html = plainToContent(ta.value);
+        await saveWork(work.id, { content: html });
+        await refresh();
+      } catch (e) {
+        alert("保存に失敗しました: " + (e && e.message ? e.message : e));
+        saveBtn.textContent = "保存";
+        saveBtn.disabled = false;
+        cancelBtn.disabled = false;
+      }
     });
   }
 
