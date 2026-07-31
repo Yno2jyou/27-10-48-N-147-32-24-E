@@ -261,7 +261,7 @@ main p.no-indent { text-indent: 0; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 body.is-editing .admin-fab {
-  z-index: 460; /* 編集ツールバーより手前に出しすぎない */
+  z-index: 460;
 }
 body.is-editing .floating-home {
   display: none; /* 編集パネルにトップへのリンクがあるため */
@@ -498,7 +498,18 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   var app = document.getElementById("app");
   var fab = document.getElementById("admin-fab");
 
+  /* ログイン状態とは別に「管理UIを出すか」を保持（ログアウト不要で閲覧⇔編集を切替） */
+  var manageMode = false;
+  try { manageMode = sessionStorage.getItem("luna3-manage-mode") === "1"; } catch (e) {}
+
   function isAdmin() { return !!currentUser; }
+  function isManaging() { return !!currentUser && manageMode; }
+
+  function setManageMode(on) {
+    manageMode = !!on;
+    try { sessionStorage.setItem("luna3-manage-mode", manageMode ? "1" : "0"); } catch (e) {}
+    updateFab();
+  }
 
   /* ===== HTMLエスケープ ===== */
   function esc(s) {
@@ -949,7 +960,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   }
 
   function adminBar(extraHtml) {
-    if (!isAdmin()) return "";
+    if (!isManaging()) return "";
     return '<div class="admin-bar">' + (extraHtml || "") + '</div>';
   }
 
@@ -968,17 +979,18 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     html += '</header>';
     html += '<main>';
     html += '<div class="intro" id="epigraph-area">' + formatShort(data.site.epigraph) + '</div>';
-    if (isAdmin()) {
+    if (isManaging()) {
       html += adminBar(
         '<button class="btn" data-action="edit-site">サイト情報を編集</button>' +
         '<button class="btn" data-action="edit-theme">配色を編集</button>' +
-        '<button class="btn primary" data-action="add-work">作品を追加</button>'
+        '<button class="btn primary" data-action="add-work">作品を追加</button>' +
+        '<button class="btn" data-action="logout">ログアウト</button>'
       );
     }
     html += '<div class="works">';
     data.works.forEach(function (w) {
       html += '<div class="work-card" data-route="#/work/' + encodeURIComponent(w.id) + '">';
-      if (isAdmin()) {
+      if (isManaging()) {
         html += '<button class="work-card-admin-btn" data-action="edit-work" data-id="' + esc(w.id) + '">編集</button>';
         html += '<button class="work-card-admin-btn work-card-delete-btn" data-action="delete-work" data-id="' + esc(w.id) + '" data-title="' + esc(w.title) + '">削除</button>';
       }
@@ -993,7 +1005,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     html += '<footer><p>' + esc(data.site.title) + '</p><p>&copy; 2026</p></footer>';
     app.innerHTML = html;
 
-    if (isAdmin()) attachHomeAdminHandlers(data);
+    if (isManaging()) attachHomeAdminHandlers(data);
     app.querySelectorAll(".work-card").forEach(function (card) {
       card.addEventListener("click", function (e) {
         if (e.target.closest(".work-card-admin-btn")) return;
@@ -1017,7 +1029,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     app.innerHTML = html;
 
     attachWorkInteractions();
-    if (isAdmin()) {
+    if (isManaging()) {
       setTimeout(function () { enterInlineBodyEdit(work); }, 0);
     }
   }
@@ -1096,6 +1108,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       errBox.style.display = "none";
       signInWithEmailAndPassword(auth, emailInput.value.trim(), passInput.value)
         .then(function () {
+          setManageMode(true); /* ログイン直後は編集モードで開始 */
           overlay.remove();
         })
         .catch(function (err) {
@@ -1110,19 +1123,34 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     overlay.addEventListener("click", function (e) { if (e.target === overlay) overlay.remove(); });
   }
 
-  function logout() { signOut(auth); }
+  function logout() {
+    setManageMode(false);
+    signOut(auth);
+  }
 
   function updateFab() {
-    if (isAdmin()) {
-      fab.textContent = "ログアウト";
-      fab.classList.add("is-admin");
-    } else {
+    if (!isAdmin()) {
       fab.textContent = "管理 🔏";
       fab.classList.remove("is-admin");
+      fab.title = "管理者ログイン";
+    } else if (manageMode) {
+      fab.textContent = "閲覧モード";
+      fab.classList.add("is-admin");
+      fab.title = "編集UIを閉じて閲覧だけする（ログインは維持）";
+    } else {
+      fab.textContent = "編集モード";
+      fab.classList.add("is-admin");
+      fab.title = "編集・管理UIを開く";
     }
   }
   fab.addEventListener("click", function () {
-    if (isAdmin()) { logout(); } else { openLoginModal(); }
+    if (!isAdmin()) {
+      openLoginModal();
+      return;
+    }
+    /* ログイン中はログアウトせず、閲覧 ⇔ 編集だけ切替 */
+    setManageMode(!manageMode);
+    if (cache) render();
   });
 
   /* ===== 管理: 汎用フォームモーダル ===== */
@@ -1173,6 +1201,11 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   }
 
   function attachHomeAdminHandlers(data) {
+    var logoutBtn = app.querySelector('[data-action="logout"]');
+    if (logoutBtn) logoutBtn.addEventListener("click", function () {
+      if (window.confirm("ログアウトしますか？")) logout();
+    });
+
     var editSiteBtn = app.querySelector('[data-action="edit-site"]');
     if (editSiteBtn) editSiteBtn.addEventListener("click", function () {
       openFormModal("サイト情報を編集", [
@@ -1457,8 +1490,9 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       '<div class="edit-nav">' +
       '<a href="#/" data-home data-edit-home>トップページへ</a>' +
       '<a href="#toc" data-edit-toc>目次</a>' +
+      '<a href="#" data-edit-viewmode>閲覧モード</a>' +
       '</div>' +
-      '<div class="hint">編集中 · 変更後は保存</div>' +
+      '<div class="hint">編集中 · 変更後は保存（閲覧モードで編集UIを閉じる・ログインは維持）</div>' +
       '<div class="jump-wrap">' +
       '<label for="chapter-jump">章へ移動</label>' +
       '<select id="chapter-jump" class="chapter-jump"></select>' +
@@ -1707,6 +1741,12 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         setTimeout(function () { jump.style.boxShadow = ""; }, 1200);
       }
     });
+    var viewModeLink = toolbar.querySelector("[data-edit-viewmode]");
+    if (viewModeLink) viewModeLink.addEventListener("click", function (e) {
+      e.preventDefault();
+      setManageMode(false);
+      if (cache) render();
+    });
 
     var saveBtn = toolbar.querySelector("[data-save]");
 
@@ -1756,8 +1796,12 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   /* ===== 認証状態の監視 ===== */
   onAuthStateChanged(auth, function (user) {
     currentUser = user;
+    if (!user) {
+      manageMode = false;
+      try { sessionStorage.setItem("luna3-manage-mode", "0"); } catch (e) {}
+    }
     updateFab();
-    if (cache) render(); // ログイン/ログアウトで管理UIを出し分け
+    if (cache) render(); // ログイン状態・編集モードの切替で UI を更新
   });
 
   /* ===== 初期化 ===== */
