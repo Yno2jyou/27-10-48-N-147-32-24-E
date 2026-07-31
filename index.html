@@ -340,8 +340,21 @@ body.keyboard-open .admin-fab { display: none !important; }
   border-radius: 20px; padding: 5px 12px; background: rgba(6,5,8,0.75); cursor: pointer; transition: all 0.2s ease;
 }
 .work-card-admin-btn:hover { background: rgba(154,139,122,0.16); color: var(--fg); }
-.work-card-delete-btn { top: 14px; right: 72px; color: #c45c5c; border-color: rgba(196,92,92,0.45); }
+.work-card-delete-btn { top: 14px; right: 148px; color: #c45c5c; border-color: rgba(196,92,92,0.45); }
 .work-card-delete-btn:hover { background: rgba(196,92,92,0.14); color: #ef8888; border-color: rgba(196,92,92,0.7); }
+.work-card-publish-btn { top: 14px; right: 72px; color: #7a9a7a; border-color: rgba(122,154,122,0.45); }
+.work-card-publish-btn:hover { background: rgba(122,154,122,0.14); color: #a8c8a8; border-color: rgba(122,154,122,0.7); }
+.work-card-publish-btn.is-private { color: #9a8b7a; border-color: rgba(154,139,122,0.45); }
+.work-card-publish-btn.is-private:hover { background: rgba(154,139,122,0.14); color: var(--fg); border-color: var(--accent); }
+.work-card.is-unpublished { opacity: 0.72; }
+.work-card.is-unpublished .work-title::after {
+  content: " 非公開";
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--fg-dim);
+  vertical-align: middle;
+}
 .work-page-admin-bar { text-align: center; margin-bottom: 12px; }
 
 /* 作品ページ：常に見えるトップへ */
@@ -803,7 +816,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         batch.set(ref, {
           number: w.number, title: w.title, subtitle: w.subtitle,
           desc: w.desc, content: w.content,
-          order: DEFAULTS.works.indexOf(w)
+          order: DEFAULTS.works.indexOf(w),
+          published: w.published !== false
         });
       });
       await batch.commit();
@@ -821,12 +835,18 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       var worksSnap = await getDocs(WORKS_COL);
       if (!metaSnap.exists() || worksSnap.empty) {
         // Firestoreがまだ空（未ログイン状態で初回アクセスなど）
-        cache = { site: DEFAULTS.site, theme: { bg: "#060508", fg: "#e6e2dc", accent: "#9a8b7a" }, works: DEFAULTS.works };
+        cache = { site: DEFAULTS.site, theme: { bg: "#060508", fg: "#e6e2dc", accent: "#9a8b7a" }, works: DEFAULTS.works.map(function (w) {
+          return Object.assign({}, w, { published: w.published !== false });
+        }) };
         return cache;
       }
       var meta = metaSnap.data();
       var works = [];
-      worksSnap.forEach(function (d) { works.push(Object.assign({ id: d.id }, d.data())); });
+      worksSnap.forEach(function (d) {
+        var row = Object.assign({ id: d.id }, d.data());
+        if (row.published === undefined) row.published = true;
+        works.push(row);
+      });
       works.sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
       cache = {
         site: Object.assign({ title: "", subtitle: "", epigraph: "", catchcopy: "", subcopy: "" }, meta.site || {}),
@@ -836,7 +856,9 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       return cache;
     } catch (e) {
       console.warn("読み込みに失敗、初期データを表示します:", e);
-      cache = { site: DEFAULTS.site, theme: { bg: "#060508", fg: "#e6e2dc", accent: "#9a8b7a" }, works: DEFAULTS.works };
+      cache = { site: DEFAULTS.site, theme: { bg: "#060508", fg: "#e6e2dc", accent: "#9a8b7a" }, works: DEFAULTS.works.map(function (w) {
+        return Object.assign({}, w, { published: w.published !== false });
+      }) };
       return cache;
     }
   }
@@ -888,7 +910,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       subtitle: (fields.subtitle || "").trim(),
       desc: plainToBr(fields.desc || ""),
       content: content,
-      order: order
+      order: order,
+      published: true
     });
     return id;
   }
@@ -976,6 +999,11 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     if (route.name === "work") {
       var work = cache.works.filter(function (w) { return w.id === route.id; })[0];
       if (!work) { renderHome(cache); return; }
+      if (work.published === false && !isAdmin()) {
+        location.hash = "#/";
+        renderHome(cache);
+        return;
+      }
       renderWork(cache, work);
     } else {
       renderHome(cache);
@@ -1018,10 +1046,19 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       );
     }
     html += '<div class="works">';
-    data.works.forEach(function (w) {
-      html += '<div class="work-card" data-route="#/work/' + encodeURIComponent(w.id) + '">';
+    var listWorks = isManaging()
+      ? data.works
+      : data.works.filter(function (w) { return w.published !== false; });
+    listWorks.forEach(function (w) {
+      var isPub = w.published !== false;
+      html += '<div class="work-card' + (isManaging() && !isPub ? ' is-unpublished' : '') + '" data-route="#/work/' + encodeURIComponent(w.id) + '">';
       if (isManaging()) {
         html += '<button class="work-card-admin-btn" data-action="edit-work" data-id="' + esc(w.id) + '">編集</button>';
+        if (isPub) {
+          html += '<button class="work-card-admin-btn work-card-publish-btn" data-action="toggle-publish" data-id="' + esc(w.id) + '" data-published="1">非公開</button>';
+        } else {
+          html += '<button class="work-card-admin-btn work-card-publish-btn is-private" data-action="toggle-publish" data-id="' + esc(w.id) + '" data-published="0">公開</button>';
+        }
         html += '<button class="work-card-admin-btn work-card-delete-btn" data-action="delete-work" data-id="' + esc(w.id) + '" data-title="' + esc(w.title) + '">削除</button>';
       }
       html += '<div class="work-number">' + esc(w.number) + '</div>';
@@ -1288,6 +1325,22 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         }
         var id = await createWork(result);
         location.hash = "#/work/" + encodeURIComponent(id);
+      });
+    });
+
+    app.querySelectorAll('[data-action="toggle-publish"]').forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var id = btn.getAttribute("data-id");
+        var currentlyPub = btn.getAttribute("data-published") === "1";
+        var next = !currentlyPub;
+        var msg = next
+          ? "この作品を公開しますか？"
+          : "この作品を非公開にしますか？\n（閲覧モード・一般訪問者の一覧からは表示されなくなります）";
+        if (!window.confirm(msg)) return;
+        saveWork(id, { published: next }).then(function () { return refresh(); }).catch(function (err) {
+          alert("公開設定の変更に失敗しました: " + (err && err.message ? err.message : err));
+        });
       });
     });
 
