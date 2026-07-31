@@ -295,19 +295,23 @@ main p.no-indent { text-indent: 0; }
 }
 .inline-editor-toolbar .actions { display: flex; gap: 10px; margin-left: auto; }
 main#honbun.is-editing {
-  outline: 1px dashed var(--accent-soft);
-  outline-offset: 12px;
+  outline: 1px dashed rgba(154,139,122,0.35);
+  outline-offset: 10px;
   border-radius: 2px;
   cursor: text;
 }
-main#honbun.is-editing #toc { pointer-events: none; opacity: 0.45; user-select: none; }
+main#honbun.is-editing:focus { outline-color: rgba(154,139,122,0.55); }
 main#honbun.is-editing a { pointer-events: none; cursor: text; }
-main#honbun.is-editing .section-title:focus,
-main#honbun.is-editing p:focus { outline: none; }
-main#honbun.is-editing p:hover,
-main#honbun.is-editing .section-title:hover {
-  background: rgba(154,139,122,0.06);
+/* フラット編集時も通常表示と同じタイポグラフィ */
+main#honbun.is-editing > h2.section-title {
+  font-size: 15px; font-weight: normal; color: var(--fg-dim); text-align: center;
+  letter-spacing: 0.2em; margin: 72px 0 40px; padding-bottom: 16px; border-bottom: 1px solid var(--line);
 }
+main#honbun.is-editing > h2.section-title:first-child { margin-top: 0; }
+main#honbun.is-editing > p {
+  margin: 0 0 1.4em; text-indent: 1em;
+}
+main#honbun.is-editing > p.no-indent { text-indent: 0; }
 @media (max-width: 520px) {
   .inline-editor-toolbar { margin: 0 12px 8px; padding: 10px 14px; border-radius: 14px; }
 }
@@ -561,10 +565,21 @@ main#honbun.is-editing .section-title:hover {
     }
   }
 
+  /** 保存済み HTML から余分な <main> ラップを外す */
+  function normalizeWorkHtml(html) {
+    html = String(html == null ? "" : html);
+    if (!html) return "";
+    // 内側にネストされた <main id="honbun">...</main> を中身だけに展開
+    html = html.replace(/<main\b[^>]*\bid=["']honbun["'][^>]*>/gi, "");
+    html = html.replace(/<main\b[^>]*>/gi, "");
+    html = html.replace(/<\/main>/gi, "");
+    return html.trim();
+  }
+
   function formatContent(s) {
     if (s == null || s === "") return "";
     if (looksLikeHtml(s) && (s.indexOf("class=\"section\"") >= 0 || s.indexOf("<p") >= 0 || s.indexOf("id=\"toc\"") >= 0)) {
-      return s;
+      return normalizeWorkHtml(s);
     }
     return plainToContent(s);
   }
@@ -999,9 +1014,205 @@ main#honbun.is-editing .section-title:hover {
     });
   }
 
+  function unwrapNestedMains(root) {
+    var guard = 0;
+    while (guard++ < 20) {
+      var nested = root.querySelector("main");
+      if (!nested) break;
+      var frag = document.createDocumentFragment();
+      while (nested.firstChild) frag.appendChild(nested.firstChild);
+      nested.parentNode.replaceChild(frag, nested);
+    }
+  }
+
+  /** 編集用に DOM をフラット化（見出し + 段落のみ）。選択・コピペが安定する */
+  function flattenWorkDom(main) {
+    unwrapNestedMains(main);
+    var parts = [];
+    var sections = main.querySelectorAll(".section");
+    if (sections.length) {
+      sections.forEach(function (sec) {
+        var titleEl = sec.querySelector(".section-title");
+        if (titleEl) {
+          var t = (titleEl.textContent || "").trim();
+          if (t) parts.push({ kind: "h2", text: t });
+        }
+        sec.querySelectorAll("p").forEach(function (p) {
+          var t = (p.textContent || "").trim();
+          if (!t) return;
+          parts.push({
+            kind: "p",
+            text: t,
+            noIndent: p.classList.contains("no-indent")
+          });
+        });
+      });
+    } else {
+      main.querySelectorAll("h2, p").forEach(function (el) {
+        var t = (el.textContent || "").trim();
+        if (!t) return;
+        if (el.tagName === "H2") parts.push({ kind: "h2", text: t });
+        else parts.push({ kind: "p", text: t, noIndent: el.classList.contains("no-indent") });
+      });
+    }
+
+    // あとがき
+    var aw = main.querySelector(".afterword-content");
+    if (aw) {
+      var awTitle = aw.querySelector(".aw-title");
+      parts.push({ kind: "h2", text: ((awTitle && awTitle.textContent) || "あとがき").trim() });
+      aw.querySelectorAll("p").forEach(function (p) {
+        var t = (p.textContent || "").trim();
+        if (t) parts.push({ kind: "p", text: t, noIndent: p.classList.contains("no-indent") });
+      });
+    }
+
+    if (!parts.length) return;
+
+    var html = "";
+    parts.forEach(function (part) {
+      if (part.kind === "h2") {
+        html += '<h2 class="section-title">' + esc(part.text) + "</h2>\n";
+      } else {
+        html += "<p" + (part.noIndent ? ' class="no-indent"' : "") + ">" + esc(part.text) + "</p>\n";
+      }
+    });
+    main.innerHTML = html;
+  }
+
+  /** フラット DOM → 保存用（目次・section 付き）HTML */
+  function rebuildWorkHtmlFromFlat(main) {
+    var children = Array.prototype.slice.call(main.children);
+    var chapters = [];
+    var current = { title: null, paras: [] };
+
+    function pushCurrent() {
+      if (current.title || current.paras.length) chapters.push(current);
+      current = { title: null, paras: [] };
+    }
+
+    children.forEach(function (el) {
+      if (el.tagName === "H2") {
+        pushCurrent();
+        current.title = (el.textContent || "").trim();
+      } else if (el.tagName === "P") {
+        var t = (el.textContent || "").trim();
+        if (t) {
+          current.paras.push({
+            text: t,
+            noIndent: el.classList.contains("no-indent") || /^[「『（(\[【─―—]/.test(t)
+          });
+        }
+      } else {
+        // ブラウザが挿入した div など → テキストを段落化
+        var t = (el.textContent || "").trim();
+        if (t) {
+          current.paras.push({ text: t, noIndent: /^[「『（(\[【─―—]/.test(t) });
+        }
+      }
+    });
+    pushCurrent();
+
+    // テキストノードのみのゴミも拾う
+    if (!chapters.length) {
+      var raw = (main.textContent || "").trim();
+      if (raw) chapters.push({ title: null, paras: [{ text: raw, noIndent: false }] });
+    }
+
+    var tocItems = [];
+    var sectionsHtml = [];
+    var afterwordHtml = "";
+    var chIndex = 0;
+
+    chapters.forEach(function (ch) {
+      var title = ch.title || "";
+      var isAfterword = /^あとがき/.test(title);
+      var pHtml = ch.paras.map(function (p) {
+        return "<p" + (p.noIndent ? ' class="no-indent"' : "") + ">" + esc(p.text) + "</p>";
+      }).join("\n    ");
+
+      if (isAfterword) {
+        afterwordHtml =
+          '<div class="afterword-section">\n' +
+          '  <button type="button" class="afterword-toggle" aria-expanded="false">最後に</button>\n' +
+          '  <div class="afterword-content" hidden>\n' +
+          '    <h2 class="aw-title">' + esc(title || "あとがき") + "</h2>\n" +
+          "    " + pHtml + "\n" +
+          "  </div>\n</div>";
+        return;
+      }
+
+      var id = "ch" + chIndex;
+      chIndex += 1;
+      var displayTitle = title || (chapters.length === 1 ? "" : ("第" + chIndex + "話"));
+      if (displayTitle) {
+        tocItems.push('<li><a href="#' + id + '">' + esc(displayTitle) + "</a></li>");
+      }
+      var titleHtml = displayTitle
+        ? '  <h2 class="section-title">' + esc(displayTitle) + "</h2>\n"
+        : "";
+      sectionsHtml.push(
+        '<div class="section" id="' + id + '">\n' +
+        titleHtml +
+        "    " + pHtml + "\n" +
+        "</div>"
+      );
+    });
+
+    var toc = tocItems.length
+      ? '<div id="toc">\n  <ol>\n    ' + tocItems.join("\n    ") + "\n  </ol>\n</div>\n\n"
+      : "";
+    return toc + sectionsHtml.join("\n\n") + (afterwordHtml ? "\n\n" + afterwordHtml : "");
+  }
+
+  function plainChunksToParagraphHtml(text) {
+    text = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    // クリップボードは段落の区切りが「空行」ではなく「単一改行」のことが多い
+    // → 改行ごとに段落化（空行は無視）
+    var lines = text.split("\n");
+    var html = "";
+    var buffer = "";
+
+    function flushBuffer() {
+      var line = buffer.replace(/\s+/g, " ").trim();
+      buffer = "";
+      if (!line) return;
+      var hm = line.match(/^#+\s+(.+)$/);
+      if (hm) {
+        html += '<h2 class="section-title">' + esc(hm[1].trim()) + "</h2>";
+        return;
+      }
+      var noIndent = /^[「『（(\[【─―—]/.test(line);
+      html += "<p" + (noIndent ? ' class="no-indent"' : "") + ">" + esc(line) + "</p>";
+    }
+
+    lines.forEach(function (raw) {
+      var line = raw.replace(/^\s+|\s+$/g, "");
+      if (!line) {
+        // 空行 → 段落区切り
+        flushBuffer();
+        return;
+      }
+      // 単一改行も段落区切りとして扱う（小説のコピペ向け）
+      // すでに buffer があれば、前の行を段落として確定してから新しい行へ
+      if (buffer) flushBuffer();
+      buffer = line;
+    });
+    flushBuffer();
+
+    if (!html) {
+      var one = text.replace(/\n/g, "").trim();
+      if (one) html = "<p>" + esc(one) + "</p>";
+    }
+    return html;
+  }
+
   function enterInlineBodyEdit(work) {
     var main = app.querySelector("#honbun");
     if (!main || main.classList.contains("is-editing")) return;
+
+    // 複雑なネストを捨てて、見出し+段落のフラット構造にする
+    flattenWorkDom(main);
 
     app.querySelectorAll("nav.work-nav").forEach(function (n) { n.style.display = "none"; });
     var adminBarEl = app.querySelector(".work-page-admin-bar");
@@ -1011,47 +1222,81 @@ main#honbun.is-editing .section-title:hover {
     toolbar.className = "inline-editor-toolbar";
     toolbar.id = "inline-editor-toolbar";
     toolbar.innerHTML =
-      '<div class="hint">本文を直接編集中（見た目のまま文字を直せます）</div>' +
+      '<div class="hint">本文を直接編集中（ページ全体を選択・コピペできます）</div>' +
       '<div class="actions">' +
       '<button type="button" class="btn" data-cancel>キャンセル</button>' +
       '<button type="button" class="btn primary" data-save>保存</button>' +
       '</div>';
-
     main.parentNode.insertBefore(toolbar, main);
+
     main.classList.add("is-editing");
     main.setAttribute("contenteditable", "true");
     main.setAttribute("spellcheck", "false");
 
-    // 目次は編集対象外
-    var toc = main.querySelector("#toc");
-    if (toc) toc.setAttribute("contenteditable", "false");
+    function onPaste(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var clip = e.clipboardData || window.clipboardData;
+      var text = clip ? clip.getData("text/plain") : "";
+      if (!text) return;
+      var html = plainChunksToParagraphHtml(text);
+      if (!html) return;
+      if (document.queryCommandSupported && document.queryCommandSupported("insertHTML")) {
+        document.execCommand("insertHTML", false, html);
+      } else {
+        var sel = window.getSelection();
+        if (sel && sel.rangeCount) {
+          var range = sel.getRangeAt(0);
+          range.deleteContents();
+          var tmp = document.createElement("div");
+          tmp.innerHTML = html;
+          var frag = document.createDocumentFragment();
+          var node;
+          while ((node = tmp.firstChild)) frag.appendChild(node);
+          range.insertNode(frag);
+        }
+      }
+    }
+    main.addEventListener("paste", onPaste);
 
-    // フォーカスを本文先頭付近へ
+    function onDrop(e) {
+      e.preventDefault();
+      var text = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+      if (!text) return;
+      var html = plainChunksToParagraphHtml(text);
+      if (html) document.execCommand("insertHTML", false, html);
+    }
+    main.addEventListener("drop", onDrop);
+
     try {
-      var firstP = main.querySelector(".section p, .section .section-title");
-      if (firstP) {
+      main.focus();
+      var first = main.querySelector("p, h2");
+      if (first) {
         var range = document.createRange();
-        range.selectNodeContents(firstP);
+        range.selectNodeContents(first);
         range.collapse(true);
         var sel = window.getSelection();
         sel.removeAllRanges();
         sel.addRange(range);
       }
-    } catch (e) {}
+    } catch (err) {}
 
     window.scrollTo(0, Math.max(0, toolbar.getBoundingClientRect().top + window.pageYOffset - 8));
 
     var saveBtn = toolbar.querySelector("[data-save]");
     var cancelBtn = toolbar.querySelector("[data-cancel]");
 
-    function teardown() {
-      main.removeAttribute("contenteditable");
+    function clearEditAttrs() {
       main.classList.remove("is-editing");
-      if (toolbar.parentNode) toolbar.parentNode.removeChild(toolbar);
+      main.removeAttribute("contenteditable");
+      main.removeAttribute("spellcheck");
+      main.removeEventListener("paste", onPaste);
+      main.removeEventListener("drop", onDrop);
     }
 
     cancelBtn.addEventListener("click", function () {
-      teardown();
+      clearEditAttrs();
+      if (toolbar.parentNode) toolbar.parentNode.removeChild(toolbar);
       refresh();
     });
 
@@ -1060,19 +1305,18 @@ main#honbun.is-editing .section-title:hover {
       saveBtn.disabled = true;
       cancelBtn.disabled = true;
       try {
-        // contenteditable 解除前に HTML を取得
-        if (toc) toc.removeAttribute("contenteditable");
-        main.removeAttribute("contenteditable");
-        main.classList.remove("is-editing");
-        var html = main.innerHTML;
+        clearEditAttrs();
+        var html = rebuildWorkHtmlFromFlat(main);
         await saveWork(work.id, { content: html });
         if (toolbar.parentNode) toolbar.parentNode.removeChild(toolbar);
         await refresh();
-      } catch (e) {
-        alert("保存に失敗しました: " + (e && e.message ? e.message : e));
-        main.setAttribute("contenteditable", "true");
+      } catch (err) {
+        alert("保存に失敗しました: " + (err && err.message ? err.message : err));
         main.classList.add("is-editing");
-        if (toc) toc.setAttribute("contenteditable", "false");
+        main.setAttribute("contenteditable", "true");
+        main.setAttribute("spellcheck", "false");
+        main.addEventListener("paste", onPaste);
+        main.addEventListener("drop", onDrop);
         saveBtn.textContent = "保存";
         saveBtn.disabled = false;
         cancelBtn.disabled = false;
