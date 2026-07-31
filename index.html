@@ -357,6 +357,30 @@ body.keyboard-open .admin-fab { display: none !important; }
 }
 .work-page-admin-bar { text-align: center; margin-bottom: 12px; }
 
+/* 隠し仕様：色反転 */
+body.is-inverted {
+  filter: invert(1) hue-rotate(180deg);
+}
+body.is-inverted img,
+body.is-inverted video,
+body.is-inverted canvas {
+  filter: invert(1) hue-rotate(180deg);
+}
+.site-title, .site-subtitle {
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.work-card.is-secret-unlocked {
+  border-color: rgba(154, 139, 122, 0.55);
+  box-shadow: 0 0 24px rgba(154, 139, 122, 0.12);
+}
+.work-card.is-secret-unlocked .work-number::before {
+  content: "✦ ";
+  opacity: 0.7;
+}
+
 /* 作品ページ：常に見えるトップへ */
 .floating-home {
   position: fixed; bottom: 22px; left: 0; right: 0;
@@ -538,6 +562,44 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   const WORKS_COL = collection(db, "site_works");
 
   const DEFAULTS = JSON.parse(document.getElementById("site-data").textContent);
+
+  /* 隠し作品：夭折した天使たち（通常は非表示。解放後に一覧へ） */
+  var SECRET_WORK_ID = "fallen-angels";
+  var SECRET_WORK = {
+    id: SECRET_WORK_ID,
+    number: "∅",
+    title: "夭折した天使たち",
+    subtitle: "Fallen Angels",
+    desc: "星の降る夜にだけ、姿を現す物語。",
+    content: '<div id="toc">\n  <ol>\n    <li><a href="#ch0">プロローグ</a></li>\n  </ol>\n</div>\n\n<main id="honbun">\n  <div class="section" id="ch0">\n    <h2 class="section-title">プロローグ</h2>\n    <p>夜空に流れ星が落ちるとき、誰かの記憶がそっと解ける。</p>\n    <p class="no-indent">ここには、まだ書かれていない物語がある。</p>\n  </div>\n</main>',
+    order: 999,
+    published: true,
+    secret: true
+  };
+  (function ensureSecretInDefaults() {
+    var has = (DEFAULTS.works || []).some(function (w) { return w.id === SECRET_WORK_ID || w.title === "夭折した天使たち"; });
+    if (!has) DEFAULTS.works.push(Object.assign({}, SECRET_WORK));
+    else {
+      DEFAULTS.works.forEach(function (w) {
+        if (w.id === SECRET_WORK_ID || w.title === "夭折した天使たち") w.secret = true;
+      });
+    }
+  })();
+
+  function isSecretUnlocked() {
+    try { return sessionStorage.getItem("luna3-secret-unlocked") === "1"; } catch (e) { return false; }
+  }
+  function setSecretUnlocked(v) {
+    try { sessionStorage.setItem("luna3-secret-unlocked", v ? "1" : "0"); } catch (e) {}
+  }
+  function isWorkVisible(w) {
+    // 編集モードではすべて表示。閲覧時は公開かつ（秘密なら解放済み）のみ
+    if (isManaging()) return true;
+    if (w.published === false) return false;
+    if (w.secret && !isSecretUnlocked()) return false;
+    return true;
+  }
+
 
   var currentUser = null;
   var cache = null; // { site, works: [...], theme }
@@ -817,10 +879,32 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
           number: w.number, title: w.title, subtitle: w.subtitle,
           desc: w.desc, content: w.content,
           order: DEFAULTS.works.indexOf(w),
-          published: w.published !== false
+          published: w.published !== false,
+          secret: !!w.secret
         });
       });
       await batch.commit();
+    } else {
+      // 既存環境でも隠し作品ドキュメントが無ければ追加
+      var secretRef = doc(db, "site_works", SECRET_WORK_ID);
+      var secretSnap = await getDoc(secretRef);
+      if (!secretSnap.exists()) {
+        var maxOrder = 0;
+        worksSnap.forEach(function (d) {
+          var o = (d.data() && d.data().order) || 0;
+          if (o > maxOrder) maxOrder = o;
+        });
+        await setDoc(secretRef, {
+          number: SECRET_WORK.number,
+          title: SECRET_WORK.title,
+          subtitle: SECRET_WORK.subtitle,
+          desc: SECRET_WORK.desc,
+          content: SECRET_WORK.content,
+          order: maxOrder + 1,
+          published: true,
+          secret: true
+        });
+      }
     }
   }
 
@@ -845,8 +929,14 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       worksSnap.forEach(function (d) {
         var row = Object.assign({ id: d.id }, d.data());
         if (row.published === undefined) row.published = true;
+        if (row.secret === undefined) {
+          row.secret = (row.id === SECRET_WORK_ID || row.title === "夭折した天使たち");
+        }
         works.push(row);
       });
+      if (!works.some(function (w) { return w.id === SECRET_WORK_ID || w.title === "夭折した天使たち"; })) {
+        works.push(Object.assign({}, SECRET_WORK));
+      }
       works.sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
       cache = {
         site: Object.assign({ title: "", subtitle: "", epigraph: "", catchcopy: "", subcopy: "" }, meta.site || {}),
@@ -981,6 +1071,28 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     setTimeout(function () { spawnShootingStar(); scheduleShootingStars(); }, 1800 + Math.random() * 2200);
   }
 
+  var meteorBurstTimer = null;
+  var meteorBurstEnd = 0;
+  function startMeteorShower(durationMs) {
+    durationMs = durationMs || 30000;
+    meteorBurstEnd = Date.now() + durationMs;
+    if (meteorBurstTimer) clearInterval(meteorBurstTimer);
+    // 流星群：短い間隔で連続発生
+    function burstTick() {
+      if (Date.now() >= meteorBurstEnd) {
+        clearInterval(meteorBurstTimer);
+        meteorBurstTimer = null;
+        return;
+      }
+      spawnShootingStar();
+      if (Math.random() < 0.55) setTimeout(spawnShootingStar, 80 + Math.random() * 180);
+      if (Math.random() < 0.3) setTimeout(spawnShootingStar, 200 + Math.random() * 320);
+    }
+    burstTick();
+    meteorBurstTimer = setInterval(burstTick, 280 + Math.random() * 120);
+  }
+
+
   /* ===== ルーター ===== */
   function currentRoute() {
     var h = location.hash;
@@ -1000,6 +1112,11 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       var work = cache.works.filter(function (w) { return w.id === route.id; })[0];
       if (!work) { renderHome(cache); return; }
       if (work.published === false && !isAdmin()) {
+        location.hash = "#/";
+        renderHome(cache);
+        return;
+      }
+      if (work.secret && !isSecretUnlocked() && !isManaging()) {
         location.hash = "#/";
         renderHome(cache);
         return;
@@ -1046,12 +1163,13 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       );
     }
     html += '<div class="works">';
-    var listWorks = isManaging()
-      ? data.works
-      : data.works.filter(function (w) { return w.published !== false; });
+    var listWorks = data.works.filter(function (w) { return isWorkVisible(w); });
     listWorks.forEach(function (w) {
       var isPub = w.published !== false;
-      html += '<div class="work-card' + (isManaging() && !isPub ? ' is-unpublished' : '') + '" data-route="#/work/' + encodeURIComponent(w.id) + '">';
+      var cardClass = "work-card";
+      if (isManaging() && !isPub) cardClass += " is-unpublished";
+      if (w.secret && (isSecretUnlocked() || isManaging())) cardClass += " is-secret-unlocked";
+      html += '<div class="' + cardClass + '" data-route="#/work/' + encodeURIComponent(w.id) + '">';
       if (isManaging()) {
         html += '<button class="work-card-admin-btn" data-action="edit-work" data-id="' + esc(w.id) + '">編集</button>';
         if (isPub) {
@@ -1079,7 +1197,115 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         location.hash = card.getAttribute("data-route");
       });
     });
+    attachEasterEggs();
   }
+
+  /* ===== 隠し仕様（イースターエッグ） ===== */
+  var _eggTitleTaps = 0;
+  var _eggTitleTimer = null;
+  var _eggSubTaps = 0;
+  var _eggSubTimer = null;
+  var _eggPhase = "idle"; // idle | after-meteor
+  var _eggPhaseTimer = null;
+  var TAP_GAP = 700;
+
+  function attachEasterEggs() {
+    var titleEl = app.querySelector("header .site-title");
+    var subEl = app.querySelector("header .site-subtitle");
+    if (!titleEl && !subEl) return;
+
+    function onTitleTap(e) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      if (_eggTitleTimer) clearTimeout(_eggTitleTimer);
+      _eggTitleTaps += 1;
+      _eggTitleTimer = setTimeout(function () {
+        _eggTitleTaps = 0;
+      }, TAP_GAP);
+
+      // フェーズ：流星群のあとにタイトル3回で秘密解放
+      if (_eggPhase === "after-meteor") {
+        if (_eggTitleTaps >= 3) {
+          _eggTitleTaps = 0;
+          if (_eggTitleTimer) clearTimeout(_eggTitleTimer);
+          unlockSecretWork();
+        }
+        return;
+      }
+
+      // 通常：タイトル5回で流星群
+      if (_eggTitleTaps >= 5) {
+        _eggTitleTaps = 0;
+        if (_eggTitleTimer) clearTimeout(_eggTitleTimer);
+        startMeteorShower(30000);
+        _eggPhase = "after-meteor";
+        if (_eggPhaseTimer) clearTimeout(_eggPhaseTimer);
+        // 流星群終了後もしばらく（合計約45秒）3タップ受付
+        _eggPhaseTimer = setTimeout(function () {
+          _eggPhase = "idle";
+        }, 45000);
+      }
+    }
+
+    function onSubTap(e) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      if (_eggSubTimer) clearTimeout(_eggSubTimer);
+      _eggSubTaps += 1;
+      _eggSubTimer = setTimeout(function () {
+        _eggSubTaps = 0;
+      }, TAP_GAP);
+      if (_eggSubTaps >= 3) {
+        _eggSubTaps = 0;
+        if (_eggSubTimer) clearTimeout(_eggSubTimer);
+        document.body.classList.toggle("is-inverted");
+      }
+    }
+
+    function bindTap(el, handler) {
+      if (!el) return;
+      // touch と click の二重発火を防ぐ
+      var last = 0;
+      el.addEventListener("click", function (e) {
+        var now = Date.now();
+        if (now - last < 350) return;
+        last = now;
+        handler(e);
+      });
+      el.addEventListener("touchend", function (e) {
+        var now = Date.now();
+        if (now - last < 350) return;
+        last = now;
+        handler(e);
+      }, { passive: false });
+    }
+
+    bindTap(titleEl, onTitleTap);
+    bindTap(subEl, onSubTap);
+  }
+
+  function unlockSecretWork() {
+    if (isSecretUnlocked()) {
+      // すでに解放済みなら該当カードへスクロール
+      var card = app.querySelector('.work-card[data-route="#/work/' + encodeURIComponent(SECRET_WORK_ID) + '"]');
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    setSecretUnlocked(true);
+    _eggPhase = "idle";
+    if (cache) {
+      // 一覧を再描画して秘密作品を表示
+      renderHome(cache);
+      setTimeout(function () {
+        var card = app.querySelector('.work-card[data-route="#/work/' + encodeURIComponent(SECRET_WORK_ID) + '"]');
+        if (card) {
+          card.scrollIntoView({ behavior: "smooth", block: "center" });
+          card.style.transition = "box-shadow 0.6s ease, border-color 0.6s ease";
+          card.style.boxShadow = "0 0 32px rgba(200, 190, 170, 0.28)";
+          setTimeout(function () { card.style.boxShadow = ""; }, 2200);
+        }
+      }, 80);
+    }
+  }
+
 
   function renderWork(data, work) {
     var html = "";
