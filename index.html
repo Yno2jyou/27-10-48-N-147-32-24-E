@@ -257,6 +257,15 @@ main p.no-indent { text-indent: 0; }
   background: rgba(154,139,122,0.08); border: 1px solid var(--accent-soft); color: var(--accent);
   padding: 7px 18px; border-radius: 20px; cursor: pointer; transition: all 0.2s ease;
   backdrop-filter: blur(10px);
+  max-width: calc(100vw - 40px);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+body.is-editing .admin-fab {
+  top: auto; bottom: 22px; right: 16px; /* 編集中は下へ移してパネルと被らない */
+  z-index: 460;
+}
+body.is-editing .floating-home {
+  display: none; /* 編集パネルにトップへのリンクがあるため */
 }
 .admin-fab:hover { background: rgba(154,139,122,0.16); color: var(--fg); }
 .admin-fab.is-admin { background: rgba(154,139,122,0.18); border-color: var(--accent); color: var(--accent); }
@@ -402,8 +411,39 @@ main#honbun.is-editing > p {
 }
 main#honbun.is-editing > p.no-indent { text-indent: 0; }
 @media (max-width: 520px) {
-  .inline-editor-toolbar { margin: 0 12px 8px; padding: 10px 12px; border-radius: 14px; }
-  .inline-editor-toolbar .actions { width: 100%; justify-content: flex-end; margin-left: 0; }
+  .inline-editor-toolbar {
+    margin: 8px 10px 12px; padding: 12px 12px 14px; border-radius: 14px;
+    gap: 8px; top: 0; z-index: 40;
+  }
+  .inline-editor-toolbar .edit-nav {
+    order: 1; margin: 0 0 4px; font-size: 11px;
+  }
+  .inline-editor-toolbar .edit-nav a { margin: 0 10px; }
+  .inline-editor-toolbar .hint {
+    display: none; /* モバイルでは説明文を隠してコンパクトに */
+  }
+  .inline-editor-toolbar .jump-wrap {
+    order: 2; flex: 1 1 100%; flex-direction: column; align-items: stretch; gap: 6px;
+  }
+  .inline-editor-toolbar .jump-wrap label {
+    font-size: 9px; letter-spacing: 0.12em;
+  }
+  .inline-editor-toolbar select.chapter-jump {
+    width: 100%; max-width: none; font-size: 14px; padding: 10px 12px;
+  }
+  .inline-editor-toolbar .actions {
+    order: 3; width: 100%; margin-left: 0;
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+    justify-content: stretch;
+  }
+  .inline-editor-toolbar .actions .btn {
+    width: 100%; margin: 0; padding: 10px 6px; font-size: 11px;
+    text-align: center; box-sizing: border-box;
+  }
+  body.is-editing .admin-fab {
+    bottom: 18px; right: 12px; padding: 8px 14px; font-size: 9px;
+  }
+  body.is-editing .floating-home { display: none; }
 }
 
 </style>
@@ -1075,7 +1115,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
   function updateFab() {
     if (isAdmin()) {
-      fab.textContent = "管理 🔏 ログアウト";
+      fab.textContent = "ログアウト";
       fab.classList.add("is-admin");
     } else {
       fab.textContent = "管理 🔏";
@@ -1419,7 +1459,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       '<a href="#/" data-home data-edit-home>トップページへ</a>' +
       '<a href="#toc" data-edit-toc>目次</a>' +
       '</div>' +
-      '<div class="hint">編集モード（章の移動・追加・削除ができます。終わったら保存）</div>' +
+      '<div class="hint">編集中 · 変更後は保存</div>' +
       '<div class="jump-wrap">' +
       '<label for="chapter-jump">章へ移動</label>' +
       '<select id="chapter-jump" class="chapter-jump"></select>' +
@@ -1557,6 +1597,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     });
 
     main.classList.add("is-editing");
+    document.body.classList.add("is-editing");
     main.setAttribute("contenteditable", "true");
     main.setAttribute("spellcheck", "false");
 
@@ -1672,6 +1713,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
     function clearEditAttrs() {
       main.classList.remove("is-editing");
+      document.body.classList.remove("is-editing");
       main.removeAttribute("contenteditable");
       main.removeAttribute("spellcheck");
       main.removeEventListener("paste", onPaste);
