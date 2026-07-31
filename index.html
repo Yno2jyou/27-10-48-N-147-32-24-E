@@ -201,13 +201,31 @@ main p.no-indent { text-indent: 0; }
 .afterword-content p.no-indent { text-indent: 0; }
 
 @media (max-width: 520px) {
-  header { padding: 56px 18px 24px; }
-  .site-title { font-size: 14px; letter-spacing: 0.08em; }
-  main { padding: 40px 16px 80px; }
-  .work-card { padding: 28px 22px 26px; }
-  .work-title { font-size: 17px; }
-  .epigraph { padding: 0 18px; font-size: 12.5px; }
-  body { background-attachment: scroll !important; }
+  body { font-size: 14px; line-height: 1.85; background-attachment: scroll !important; }
+  header { padding: 48px 16px 20px; }
+  .site-title { font-size: 13px; letter-spacing: 0.08em; }
+  p.site-title { font-size: 13px; }
+  .site-subtitle { font-size: 10px; }
+  main { padding: 28px 14px 64px; }
+  main p { margin: 0 0 1.15em; font-size: 14px; line-height: 1.85; }
+  .section { margin-top: 48px; }
+  .section-title {
+    font-size: 13px; letter-spacing: 0.14em; margin: 0 0 28px; padding-bottom: 12px;
+  }
+  .work-card { padding: 22px 16px 20px; }
+  .work-title { font-size: 15px; letter-spacing: 0.1em; }
+  .work-subtitle { font-size: 11px; }
+  .work-desc { font-size: 12.5px; line-height: 1.8; margin: 0 0 16px; }
+  .work-number { font-size: 10px; margin-bottom: 10px; }
+  .epigraph, .intro { padding: 0 14px; font-size: 12px; line-height: 1.85; }
+  .intro { margin-bottom: 36px; }
+  nav.work-nav { padding: 0 14px 28px; font-size: 11px; }
+  footer { padding: 28px 14px 56px; font-size: 10px; }
+  .works { gap: 18px; }
+  main#honbun.is-editing > h2.section-title {
+    font-size: 13px; margin: 48px 0 28px; padding-bottom: 12px;
+  }
+  main#honbun.is-editing > p { margin: 0 0 1.15em; font-size: 14px; line-height: 1.85; }
 }
 
 /* ---------- Admin UI (styled after the LUNA3 buchi admin look) ---------- */
