@@ -266,6 +266,13 @@ body.is-editing .admin-fab {
 body.is-editing .floating-home {
   display: none; /* 編集パネルにトップへのリンクがあるため */
 }
+/* モバイル: キーボード表示中は編集パネルと管理ボタンを隠して本文を広く */
+.inline-editor-toolbar.is-keyboard-open {
+  display: none !important;
+}
+body.keyboard-open .admin-fab {
+  display: none !important;
+}
 .admin-fab:hover { background: rgba(154,139,122,0.16); color: var(--fg); }
 .admin-fab.is-admin { background: rgba(154,139,122,0.18); border-color: var(--accent); color: var(--accent); }
 
@@ -498,13 +505,12 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   var app = document.getElementById("app");
   var fab = document.getElementById("admin-fab");
 
-  /* ログイン状態とは別に「管理UIを出すか」を保持（ログアウト不要で閲覧⇔編集を切替） */
+  /* ログイン維持のまま閲覧⇔編集を切替 */
   var manageMode = false;
   try { manageMode = sessionStorage.getItem("luna3-manage-mode") === "1"; } catch (e) {}
 
   function isAdmin() { return !!currentUser; }
   function isManaging() { return !!currentUser && manageMode; }
-
   function setManageMode(on) {
     manageMode = !!on;
     try { sessionStorage.setItem("luna3-manage-mode", manageMode ? "1" : "0"); } catch (e) {}
@@ -1108,7 +1114,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       errBox.style.display = "none";
       signInWithEmailAndPassword(auth, emailInput.value.trim(), passInput.value)
         .then(function () {
-          setManageMode(true); /* ログイン直後は編集モードで開始 */
+          setManageMode(true);
           overlay.remove();
         })
         .catch(function (err) {
@@ -1136,7 +1142,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     } else if (manageMode) {
       fab.textContent = "閲覧モード";
       fab.classList.add("is-admin");
-      fab.title = "編集UIを閉じて閲覧だけする（ログインは維持）";
+      fab.title = "編集UIを閉じて閲覧する（ログイン維持）";
     } else {
       fab.textContent = "編集モード";
       fab.classList.add("is-admin");
@@ -1148,7 +1154,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       openLoginModal();
       return;
     }
-    /* ログイン中はログアウトせず、閲覧 ⇔ 編集だけ切替 */
     setManageMode(!manageMode);
     if (cache) render();
   });
@@ -1492,7 +1497,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       '<a href="#toc" data-edit-toc>目次</a>' +
       '<a href="#" data-edit-viewmode>閲覧モード</a>' +
       '</div>' +
-      '<div class="hint">編集中 · 変更後は保存（閲覧モードで編集UIを閉じる・ログインは維持）</div>' +
+      '<div class="hint">編集中 · 変更後は保存</div>' +
       '<div class="jump-wrap">' +
       '<label for="chapter-jump">章へ移動</label>' +
       '<select id="chapter-jump" class="chapter-jump"></select>' +
@@ -1634,6 +1639,56 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     main.setAttribute("contenteditable", "true");
     main.setAttribute("spellcheck", "false");
 
+    /* モバイル: キーボード表示中は編集パネルを隠す */
+    var _kbBaseH = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    var _kbTimer = null;
+    function isCoarseMobile() {
+      return window.matchMedia("(max-width: 520px), (hover: none) and (pointer: coarse)").matches;
+    }
+    function syncToolbarKeyboard() {
+      if (!toolbar.parentNode) return;
+      if (!isCoarseMobile()) {
+        toolbar.classList.remove("is-keyboard-open");
+        document.body.classList.remove("keyboard-open");
+        return;
+      }
+      var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+      /* 画面の約75%未満になったらキーボード開とみなす */
+      var open = h < _kbBaseH * 0.82;
+      toolbar.classList.toggle("is-keyboard-open", open);
+      document.body.classList.toggle("keyboard-open", open);
+    }
+    function onKbViewportChange() {
+      if (_kbTimer) clearTimeout(_kbTimer);
+      _kbTimer = setTimeout(syncToolbarKeyboard, 60);
+    }
+    function onEditorFocus() {
+      /* フォーカス時の基準高さを更新（向き変更後など） */
+      if (!document.body.classList.contains("keyboard-open")) {
+        _kbBaseH = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+      }
+      onKbViewportChange();
+    }
+    function onEditorBlur() {
+      /* キーボードが閉じるまで少し待つ */
+      setTimeout(function () {
+        if (!main.contains(document.activeElement)) {
+          toolbar.classList.remove("is-keyboard-open");
+          document.body.classList.remove("keyboard-open");
+        }
+        onKbViewportChange();
+      }, 280);
+    }
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", onKbViewportChange);
+      window.visualViewport.addEventListener("scroll", onKbViewportChange);
+    }
+    window.addEventListener("resize", onKbViewportChange);
+    main.addEventListener("focus", onEditorFocus, true);
+    main.addEventListener("blur", onEditorBlur, true);
+    /* 入力開始でも判定（一部端末は focus 後に高さが変わる） */
+    main.addEventListener("input", onKbViewportChange);
+
     function onPaste(e) {
       e.preventDefault();
       e.stopPropagation();
@@ -1753,10 +1808,21 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     function clearEditAttrs() {
       main.classList.remove("is-editing");
       document.body.classList.remove("is-editing");
+      document.body.classList.remove("keyboard-open");
       main.removeAttribute("contenteditable");
       main.removeAttribute("spellcheck");
       main.removeEventListener("paste", onPaste);
       main.removeEventListener("drop", onDrop);
+      main.removeEventListener("focus", onEditorFocus, true);
+      main.removeEventListener("blur", onEditorBlur, true);
+      main.removeEventListener("input", onKbViewportChange);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", onKbViewportChange);
+        window.visualViewport.removeEventListener("scroll", onKbViewportChange);
+      }
+      window.removeEventListener("resize", onKbViewportChange);
+      if (_kbTimer) clearTimeout(_kbTimer);
+      toolbar.classList.remove("is-keyboard-open");
     }
 
     saveBtn.addEventListener("click", async function () {
@@ -1771,10 +1837,19 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       } catch (err) {
         alert("保存に失敗しました: " + (err && err.message ? err.message : err));
         main.classList.add("is-editing");
+        document.body.classList.add("is-editing");
         main.setAttribute("contenteditable", "true");
         main.setAttribute("spellcheck", "false");
         main.addEventListener("paste", onPaste);
         main.addEventListener("drop", onDrop);
+        main.addEventListener("focus", onEditorFocus, true);
+        main.addEventListener("blur", onEditorBlur, true);
+        main.addEventListener("input", onKbViewportChange);
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener("resize", onKbViewportChange);
+          window.visualViewport.addEventListener("scroll", onKbViewportChange);
+        }
+        window.addEventListener("resize", onKbViewportChange);
         saveBtn.textContent = "保存";
         saveBtn.disabled = false;
       }
@@ -1801,7 +1876,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       try { sessionStorage.setItem("luna3-manage-mode", "0"); } catch (e) {}
     }
     updateFab();
-    if (cache) render(); // ログイン状態・編集モードの切替で UI を更新
+    if (cache) render();
   });
 
   /* ===== 初期化 ===== */
