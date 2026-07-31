@@ -338,6 +338,202 @@ main p.no-indent { text-indent: 0; }
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
+  /* ===== プレーンテキスト ↔ HTML 変換 =====
+     管理画面では HTML タグを書かず、ふつうの文章をそのまま貼るだけでよい。
+     ・短い文（エピグラフ・紹介文）: 改行がそのまま改行になる
+     ・本文: 空行で段落、行頭の「# 見出し」で章立て（目次も自動生成）
+  ===== */
+  function looksLikeHtml(s) {
+    return /<[a-zA-Z][\s\S]*>/.test(String(s || ""));
+  }
+
+  function plainToBr(text) {
+    return esc(String(text == null ? "" : text).replace(/\r\n/g, "\n")).replace(/\n/g, "<br>");
+  }
+
+  function brToPlain(html) {
+    return String(html == null ? "" : html)
+      .replace(/\r\n/g, "\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
+      .replace(/<\/?p[^>]*>/gi, "\n")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/<[^>]+>/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  function formatShort(s) {
+    if (s == null || s === "") return "";
+    if (looksLikeHtml(s)) return s;
+    return plainToBr(s);
+  }
+
+  function splitParas(body) {
+    var paras = [];
+    var buf = [];
+    String(body || "").split("\n").forEach(function (ln) {
+      if (ln.trim() === "") {
+        if (buf.length) {
+          paras.push(buf.join(""));
+          buf = [];
+        }
+      } else {
+        buf.push(ln.trim());
+      }
+    });
+    if (buf.length) paras.push(buf.join(""));
+    return paras;
+  }
+
+  function parasToHtml(paras) {
+    return paras.map(function (p) {
+      var noIndent = /^[「『（(\[【─―—]/.test(p);
+      return "<p" + (noIndent ? ' class="no-indent"' : "") + ">" + esc(p) + "</p>";
+    }).join("\n    ");
+  }
+
+  /** 本文プレーンテキスト → 目次付き HTML
+      書式:
+        # 章タイトル
+        段落（空行で区切る）
+        「会話文」もそのまま
+        # あとがき   ← 特別扱い（折りたたみあとがき）
+  */
+  function plainToContent(text) {
+    text = String(text == null ? "" : text).replace(/\r\n/g, "\n").replace(/^\uFEFF/, "").trim();
+    if (!text) return "";
+    if (looksLikeHtml(text) && (text.indexOf("class=\"section\"") >= 0 || text.indexOf("id=\"toc\"") >= 0)) {
+      return text;
+    }
+
+    var lines = text.split("\n");
+    var chapters = [];
+    var current = { title: null, lines: [] };
+    lines.forEach(function (line) {
+      var m = line.match(/^#+\s+(.+)$/);
+      if (m) {
+        if (current.title !== null || current.lines.some(function (l) { return l.trim(); })) {
+          chapters.push(current);
+        }
+        current = { title: m[1].trim(), lines: [] };
+      } else {
+        current.lines.push(line);
+      }
+    });
+    if (current.title !== null || current.lines.some(function (l) { return l.trim(); })) {
+      chapters.push(current);
+    }
+    if (!chapters.length) {
+      chapters.push({ title: null, lines: lines });
+    }
+
+    var tocItems = [];
+    var sectionsHtml = [];
+    var afterwordHtml = "";
+    var chIndex = 0;
+    chapters.forEach(function (ch) {
+      var title = ch.title || "";
+      var isAfterword = /^あとがき/.test(title);
+      var body = ch.lines.join("\n").trim();
+      var paras = splitParas(body);
+
+      if (isAfterword) {
+        afterwordHtml =
+          '<div class="afterword-section">\n' +
+          '  <button type="button" class="afterword-toggle" aria-expanded="false">最後に</button>\n' +
+          '  <div class="afterword-content" hidden>\n' +
+          '    <h2 class="aw-title">' + esc(title || "あとがき") + "</h2>\n" +
+          "    " + parasToHtml(paras) + "\n" +
+          "  </div>\n</div>";
+        return;
+      }
+
+      var id = "ch" + chIndex;
+      chIndex += 1;
+      var displayTitle = title || (chapters.length === 1 ? "" : ("第" + chIndex + "話"));
+      if (displayTitle) {
+        tocItems.push('<li><a href="#' + id + '">' + esc(displayTitle) + "</a></li>");
+      }
+      var titleHtml = displayTitle
+        ? '  <h2 class="section-title">' + esc(displayTitle) + "</h2>\n"
+        : "";
+      sectionsHtml.push(
+        '<div class="section" id="' + id + '">\n' +
+        titleHtml +
+        "    " + parasToHtml(paras) + "\n" +
+        "</div>"
+      );
+    });
+
+    var toc = tocItems.length
+      ? '<div id="toc">\n  <ol>\n    ' + tocItems.join("\n    ") + "\n  </ol>\n</div>\n\n"
+      : "";
+    return toc + sectionsHtml.join("\n\n") + (afterwordHtml ? "\n\n" + afterwordHtml : "");
+  }
+
+  /** 既存 HTML 本文 → 編集用プレーンテキスト */
+  function contentToPlain(html) {
+    if (html == null || html === "") return "";
+    if (!looksLikeHtml(html)) return String(html);
+    try {
+      var doc = new DOMParser().parseFromString("<div id='__root'>" + html + "</div>", "text/html");
+      var root = doc.getElementById("__root") || doc.body;
+      var sections = root.querySelectorAll(".section");
+      var parts = [];
+      if (sections.length) {
+        sections.forEach(function (sec) {
+          var titleEl = sec.querySelector(".section-title");
+          if (titleEl) {
+            var t = (titleEl.textContent || "").trim();
+            if (t) parts.push("# " + t);
+          }
+          sec.querySelectorAll("p").forEach(function (p) {
+            var t = (p.textContent || "").trim();
+            if (t) parts.push(t);
+          });
+        });
+      }
+      var aw = root.querySelector(".afterword-content");
+      if (aw) {
+        var awTitle = aw.querySelector(".aw-title");
+        parts.push("# " + ((awTitle && awTitle.textContent) || "あとがき").trim());
+        var epi = aw.querySelector(".aw-epigraph");
+        if (epi) {
+          var epiLines = [];
+          epi.querySelectorAll("span").forEach(function (sp) {
+            var t = (sp.textContent || "").trim();
+            if (t) epiLines.push(t);
+          });
+          if (epiLines.length) parts.push(epiLines.join("\n"));
+        }
+        aw.querySelectorAll("p").forEach(function (p) {
+          var t = (p.textContent || "").trim();
+          if (t) parts.push(t);
+        });
+      }
+      if (parts.length) {
+        return parts.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+      }
+      return brToPlain(html);
+    } catch (e) {
+      return brToPlain(html);
+    }
+  }
+
+  function formatContent(s) {
+    if (s == null || s === "") return "";
+    if (looksLikeHtml(s) && (s.indexOf("class=\"section\"") >= 0 || s.indexOf("<p") >= 0 || s.indexOf("id=\"toc\"") >= 0)) {
+      return s;
+    }
+    return plainToContent(s);
+  }
+
   /* ===== Firestore 初期化・読み込み =====
      注意: 初期データの書き込み(seed)はログインしていないと
      セキュリティルールにより失敗するため、管理者がログインして
@@ -512,7 +708,7 @@ main p.no-indent { text-indent: 0; }
     if (isAdmin()) {
       html += adminBar('<button class="btn" data-action="edit-site">サイト情報を編集</button><button class="btn" data-action="edit-theme">配色を編集</button>');
     }
-    html += '<div class="intro" id="epigraph-area">' + data.site.epigraph + '</div>';
+    html += '<div class="intro" id="epigraph-area">' + formatShort(data.site.epigraph) + '</div>';
     html += '<div class="works">';
     data.works.forEach(function (w) {
       html += '<div class="work-card" data-route="#/work/' + encodeURIComponent(w.id) + '">';
@@ -522,7 +718,7 @@ main p.no-indent { text-indent: 0; }
       html += '<div class="work-number">' + esc(w.number) + '</div>';
       html += '<h2 class="work-title">' + esc(w.title) + '</h2>';
       html += '<p class="work-subtitle">' + esc(w.subtitle) + '</p>';
-      html += '<p class="work-desc">' + w.desc + '</p>';
+      html += '<p class="work-desc">' + formatShort(w.desc) + '</p>';
       html += '<span class="work-link">読む →</span>';
       html += '</div>';
     });
@@ -548,9 +744,9 @@ main p.no-indent { text-indent: 0; }
     html += '</header>';
     html += '<nav class="work-nav"><a href="#/" data-home>トップページへ</a> <a href="#toc">目次</a></nav>';
     if (isAdmin()) {
-      html += '<div class="work-page-admin-bar">' + adminBar('<button class="btn" data-action="edit-work-meta" data-id="' + esc(work.id) + '">タイトル/紹介文を編集</button><button class="btn" data-action="edit-work-body" data-id="' + esc(work.id) + '">本文(HTML)を編集</button>') + '</div>';
+      html += '<div class="work-page-admin-bar">' + adminBar('<button class="btn" data-action="edit-work-meta" data-id="' + esc(work.id) + '">タイトル/紹介文を編集</button><button class="btn" data-action="edit-work-body" data-id="' + esc(work.id) + '">本文を編集</button>') + '</div>';
     }
-    html += '<main id="honbun">' + work.content + '</main>';
+    html += '<main id="honbun">' + formatContent(work.content) + '</main>';
     html += '<nav class="work-nav"><a href="#/" data-home>トップページへ</a></nav>';
     html += '<footer><p>&copy; 2026 ' + esc(work.title) + '</p></footer>';
     app.innerHTML = html;
@@ -668,14 +864,15 @@ main p.no-indent { text-indent: 0; }
     overlay.className = "modal-overlay";
     var box = document.createElement("div");
     box.className = "modal-box";
-    box.style.maxWidth = "560px";
+    var hasLongText = fields.some(function (f) { return f.type === "textarea" && (f.rows || 0) >= 12; });
+    box.style.maxWidth = hasLongText ? "720px" : "560px";
     box.style.maxHeight = "84vh";
     box.style.overflowY = "auto";
     var html = "<h3>" + esc(title) + "</h3>";
     fields.forEach(function (f) {
-      html += '<label>' + esc(f.label) + '</label>';
+      html += '<label style="white-space:pre-line;line-height:1.6;">' + esc(f.label) + '</label>';
       if (f.type === "textarea") {
-        html += '<textarea data-field="' + f.key + '" rows="' + (f.rows || 4) + '" style="width:100%;background:#050406;border:1px solid var(--line);color:var(--fg);padding:8px 10px;font-family:var(--font-body);font-size:13px;line-height:1.7;">' + esc(f.value) + '</textarea>';
+        html += '<textarea data-field="' + f.key + '" rows="' + (f.rows || 4) + '" style="width:100%;background:#050406;border:1px solid var(--line);color:var(--fg);padding:8px 10px;font-family:var(--font-body);font-size:13px;line-height:1.7;white-space:pre-wrap;">' + esc(f.value) + '</textarea>';
       } else if (f.type === "color") {
         html += '<input type="color" data-field="' + f.key + '" value="' + esc(f.value) + '" />';
       } else {
@@ -714,8 +911,11 @@ main p.no-indent { text-indent: 0; }
       openFormModal("サイト情報を編集", [
         { key: "title", label: "サイトタイトル", type: "text", value: data.site.title },
         { key: "subtitle", label: "サブタイトル", type: "text", value: data.site.subtitle },
-        { key: "epigraph", label: "エピグラフ（HTML可・<br>で改行）", type: "textarea", rows: 4, value: data.site.epigraph }
-      ], function (result) { return saveSite(result); });
+        { key: "epigraph", label: "エピグラフ（ふつうの文章・改行OK）", type: "textarea", rows: 4, value: brToPlain(data.site.epigraph) }
+      ], function (result) {
+        result.epigraph = plainToBr(result.epigraph);
+        return saveSite(result);
+      });
     });
 
     var editThemeBtn = app.querySelector('[data-action="edit-theme"]');
@@ -736,8 +936,11 @@ main p.no-indent { text-indent: 0; }
           { key: "number", label: "番号", type: "text", value: w.number },
           { key: "title", label: "タイトル", type: "text", value: w.title },
           { key: "subtitle", label: "サブタイトル", type: "text", value: w.subtitle },
-          { key: "desc", label: "紹介文（HTML可・<br>で改行）", type: "textarea", rows: 6, value: w.desc }
-        ], function (result) { return saveWork(id, result); });
+          { key: "desc", label: "紹介文（ふつうの文章・改行OK）", type: "textarea", rows: 6, value: brToPlain(w.desc) }
+        ], function (result) {
+          result.desc = plainToBr(result.desc);
+          return saveWork(id, result);
+        });
       });
     });
   }
@@ -748,15 +951,27 @@ main p.no-indent { text-indent: 0; }
       openFormModal("「" + work.title + "」のタイトル/紹介文を編集", [
         { key: "title", label: "タイトル", type: "text", value: work.title },
         { key: "subtitle", label: "サブタイトル", type: "text", value: work.subtitle },
-        { key: "desc", label: "トップページの紹介文（HTML可）", type: "textarea", rows: 6, value: work.desc }
-      ], function (result) { return saveWork(work.id, result); });
+        { key: "desc", label: "トップページの紹介文（ふつうの文章・改行OK）", type: "textarea", rows: 6, value: brToPlain(work.desc) }
+      ], function (result) {
+        result.desc = plainToBr(result.desc);
+        return saveWork(work.id, result);
+      });
     });
 
     var bodyBtn = app.querySelector('[data-action="edit-work-body"]');
     if (bodyBtn) bodyBtn.addEventListener("click", function () {
-      openFormModal("「" + work.title + "」の本文HTMLを編集（上級者向け）", [
-        { key: "content", label: "本文HTML（目次・章・あとがきを含む）", type: "textarea", rows: 18, value: work.content }
-      ], function (result) { return saveWork(work.id, result); });
+      openFormModal("「" + work.title + "」の本文を編集", [
+        {
+          key: "content",
+          label: "本文（ふつうの文章でOK）\n・空行で段落分け\n・章の区切りは行頭に「# タイトル」\n・「」で始まる行は字下げなし",
+          type: "textarea",
+          rows: 18,
+          value: contentToPlain(work.content)
+        }
+      ], function (result) {
+        result.content = plainToContent(result.content);
+        return saveWork(work.id, result);
+      });
     });
   }
 
