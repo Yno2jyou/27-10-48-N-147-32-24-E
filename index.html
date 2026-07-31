@@ -513,7 +513,12 @@ main#honbun.is-editing {
   box-shadow: inset 0 0 0 1px rgba(154,139,122,0.35);
   border-radius: 2px;
   cursor: text;
-  max-width: 100%;
+  /* 閲覧ページと同じ幅に揃える（ワイド画面で横に伸びすぎないように） */
+  max-width: var(--max-width);
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
   overflow-x: hidden;
 }
 main#honbun.is-editing:focus {
@@ -1178,7 +1183,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         '<button class="btn" data-action="edit-site">サイト情報を編集</button>' +
         '<button class="btn" data-action="edit-theme">配色を編集</button>' +
         '<button class="btn primary" data-action="add-work">作品を追加</button>' +
-        '<button class="btn" data-action="secret-guide">隠し要素</button>' +
         '<button class="btn" data-action="logout">ログアウト</button>'
       );
     }
@@ -1614,11 +1618,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     var logoutBtn = app.querySelector('[data-action="logout"]');
     if (logoutBtn) logoutBtn.addEventListener("click", function () {
       if (window.confirm("ログアウトしますか？")) logout();
-    });
-    var secretGuideBtn = app.querySelector('[data-action="secret-guide"]');
-    if (secretGuideBtn) secretGuideBtn.addEventListener("click", function (e) {
-      e.preventDefault();
-      openSecretGuideModal();
     });
     var editSiteBtn = app.querySelector('[data-action="edit-site"]');
     if (editSiteBtn) editSiteBtn.addEventListener("click", function () {
