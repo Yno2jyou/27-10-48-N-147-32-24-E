@@ -24,6 +24,17 @@
 html { touch-action: manipulation; scroll-behavior: smooth; }
 html, body { background: var(--bg); color: var(--fg); }
 
+/* 編集中はピンチズームを抑止 */
+body.is-editing {
+  touch-action: pan-x pan-y;
+  overscroll-behavior: none;
+}
+body.is-editing main#honbun.is-editing {
+  touch-action: pan-x pan-y;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 body {
   font-family: var(--font-body);
   font-size: 16px;
@@ -247,7 +258,8 @@ main p.no-indent { text-indent: 0; }
     line-height: 1.7;
     padding: 0 8px 12px;
   }
-  main#honbun.is-editing > p { font-size: 14px; line-height: 1.85; margin: 0 0 1.2em; }
+  /* 編集中は16px以上にして iOS のフォーカス時自動ズームを防ぐ */
+  main#honbun.is-editing > p { font-size: 16px; line-height: 1.85; margin: 0 0 1.2em; }
 }
 
 /* ---------- Admin UI (styled after the LUNA3 buchi admin look) ---------- */
@@ -429,7 +441,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     font-size: 9px; letter-spacing: 0.12em;
   }
   .inline-editor-toolbar select.chapter-jump {
-    width: 100%; max-width: none; font-size: 14px; padding: 10px 12px;
+    width: 100%; max-width: none; font-size: 16px; padding: 10px 12px;
   }
   .inline-editor-toolbar .actions {
     order: 3; width: 100%; margin-left: 0;
@@ -1080,9 +1092,9 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       '<h3>管理者ログイン</h3>' +
       '<div class="modal-error" style="display:none"></div>' +
       '<label>メールアドレス</label>' +
-      '<input type="text" placeholder="admin@example.com" id="admin-email-input" />' +
+      '<input type="email" name="username" autocomplete="username" placeholder="admin@example.com" id="admin-email-input" />' +
       '<label>パスワード</label>' +
-      '<input type="password" placeholder="••••••••" id="admin-pass-input" />' +
+      '<input type="password" name="password" autocomplete="current-password" placeholder="••••••••" id="admin-pass-input" />' +
       '<div class="modal-actions">' +
       '<button class="btn" data-close>キャンセル</button>' +
       '<button class="btn primary" data-login>ログイン</button>' +
@@ -1440,6 +1452,53 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     return html;
   }
 
+  /* 編集中の画面固定（ピンチズーム抑止） */
+  var _editViewportLocked = false;
+  var _editGestureHandler = null;
+  var _editTouchHandler = null;
+  var _editViewportMetaContent = null;
+
+  function lockEditViewport() {
+    if (_editViewportLocked) return;
+    _editViewportLocked = true;
+    var meta = document.querySelector('meta[name="viewport"]');
+    if (meta) {
+      _editViewportMetaContent = meta.getAttribute("content");
+      meta.setAttribute(
+        "content",
+        "width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      );
+    }
+    _editGestureHandler = function (e) { e.preventDefault(); };
+    document.addEventListener("gesturestart", _editGestureHandler, { passive: false });
+    document.addEventListener("gesturechange", _editGestureHandler, { passive: false });
+    document.addEventListener("gestureend", _editGestureHandler, { passive: false });
+    _editTouchHandler = function (e) {
+      if (e.touches && e.touches.length > 1) e.preventDefault();
+    };
+    document.addEventListener("touchmove", _editTouchHandler, { passive: false });
+  }
+
+  function unlockEditViewport() {
+    if (!_editViewportLocked) return;
+    _editViewportLocked = false;
+    var meta = document.querySelector('meta[name="viewport"]');
+    if (meta && _editViewportMetaContent != null) {
+      meta.setAttribute("content", _editViewportMetaContent);
+      _editViewportMetaContent = null;
+    }
+    if (_editGestureHandler) {
+      document.removeEventListener("gesturestart", _editGestureHandler);
+      document.removeEventListener("gesturechange", _editGestureHandler);
+      document.removeEventListener("gestureend", _editGestureHandler);
+      _editGestureHandler = null;
+    }
+    if (_editTouchHandler) {
+      document.removeEventListener("touchmove", _editTouchHandler);
+      _editTouchHandler = null;
+    }
+  }
+
   function enterInlineBodyEdit(work, opts) {
     opts = opts || {};
     var main = app.querySelector("#honbun");
@@ -1600,6 +1659,27 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     document.body.classList.add("is-editing");
     main.setAttribute("contenteditable", "true");
     main.setAttribute("spellcheck", "false");
+    // Google / パスワードマネージャの自動入力バーを抑止
+    main.setAttribute("autocomplete", "off");
+    main.setAttribute("autocorrect", "off");
+    main.setAttribute("autocapitalize", "off");
+    main.setAttribute("inputmode", "text");
+    main.setAttribute("role", "textbox");
+    main.setAttribute("aria-multiline", "true");
+    main.setAttribute("aria-autocomplete", "none");
+    main.setAttribute("data-lpignore", "true");
+    main.setAttribute("data-1p-ignore", "true");
+    main.setAttribute("data-bwignore", "true");
+    main.setAttribute("data-form-type", "other");
+    lockEditViewport();
+    // ツールバーの select / input も同様に抑止
+    toolbar.querySelectorAll("select, input, textarea, button").forEach(function (el) {
+      el.setAttribute("autocomplete", "off");
+      el.setAttribute("data-lpignore", "true");
+      el.setAttribute("data-1p-ignore", "true");
+      el.setAttribute("data-bwignore", "true");
+      el.setAttribute("data-form-type", "other");
+    });
 
     function onPaste(e) {
       e.preventDefault();
@@ -1716,8 +1796,20 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       document.body.classList.remove("is-editing");
       main.removeAttribute("contenteditable");
       main.removeAttribute("spellcheck");
+      main.removeAttribute("autocomplete");
+      main.removeAttribute("autocorrect");
+      main.removeAttribute("autocapitalize");
+      main.removeAttribute("inputmode");
+      main.removeAttribute("role");
+      main.removeAttribute("aria-multiline");
+      main.removeAttribute("aria-autocomplete");
+      main.removeAttribute("data-lpignore");
+      main.removeAttribute("data-1p-ignore");
+      main.removeAttribute("data-bwignore");
+      main.removeAttribute("data-form-type");
       main.removeEventListener("paste", onPaste);
       main.removeEventListener("drop", onDrop);
+      unlockEditViewport();
     }
 
     saveBtn.addEventListener("click", async function () {
@@ -1732,10 +1824,23 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       } catch (err) {
         alert("保存に失敗しました: " + (err && err.message ? err.message : err));
         main.classList.add("is-editing");
+        document.body.classList.add("is-editing");
         main.setAttribute("contenteditable", "true");
         main.setAttribute("spellcheck", "false");
+        main.setAttribute("autocomplete", "off");
+        main.setAttribute("autocorrect", "off");
+        main.setAttribute("autocapitalize", "off");
+        main.setAttribute("inputmode", "text");
+        main.setAttribute("role", "textbox");
+        main.setAttribute("aria-multiline", "true");
+        main.setAttribute("aria-autocomplete", "none");
+        main.setAttribute("data-lpignore", "true");
+        main.setAttribute("data-1p-ignore", "true");
+        main.setAttribute("data-bwignore", "true");
+        main.setAttribute("data-form-type", "other");
         main.addEventListener("paste", onPaste);
         main.addEventListener("drop", onDrop);
+        lockEditViewport();
         saveBtn.textContent = "保存";
         saveBtn.disabled = false;
       }
@@ -1745,6 +1850,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   /* ===== ハッシュ変更でのルーティング（"#/"で始まるもののみ） ===== */
   window.addEventListener("hashchange", function () {
     if (location.hash.indexOf("#/") === 0 || location.hash === "") {
+      unlockEditViewport();
+      document.body.classList.remove("is-editing");
       render();
     }
   });
