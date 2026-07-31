@@ -21,8 +21,20 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { touch-action: manipulation; scroll-behavior: smooth; }
+html {
+  touch-action: manipulation;
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
+}
 html, body { background: var(--bg); color: var(--fg); }
+
+#app {
+  overflow-x: hidden;
+  max-width: 100%;
+  width: 100%;
+}
 
 body {
   font-family: var(--font-body);
@@ -31,6 +43,9 @@ body {
   letter-spacing: 0.03em;
   min-height: 100vh;
   position: relative;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
   background:
     radial-gradient(ellipse 130% 90% at 50% -25%, #12101a 0%, transparent 55%),
     radial-gradient(ellipse 70% 50% at 90% 100%, #0e0c12 0%, transparent 50%),
@@ -257,22 +272,17 @@ main p.no-indent { text-indent: 0; }
   background: rgba(154,139,122,0.08); border: 1px solid var(--accent-soft); color: var(--accent);
   padding: 7px 18px; border-radius: 20px; cursor: pointer; transition: all 0.2s ease;
   backdrop-filter: blur(10px);
-  max-width: calc(100vw - 40px);
+  max-width: min(280px, calc(100% - 24px));
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 body.is-editing .admin-fab {
   z-index: 460;
 }
 body.is-editing .floating-home {
-  display: none; /* 編集パネルにトップへのリンクがあるため */
+  display: none;
 }
-/* モバイル: キーボード表示中は編集パネルと管理ボタンを隠して本文を広く */
-.inline-editor-toolbar.is-keyboard-open {
-  display: none !important;
-}
-body.keyboard-open .admin-fab {
-  display: none !important;
-}
+.inline-editor-toolbar.is-keyboard-open { display: none !important; }
+body.keyboard-open .admin-fab { display: none !important; }
 .admin-fab:hover { background: rgba(154,139,122,0.16); color: var(--fg); }
 .admin-fab.is-admin { background: rgba(154,139,122,0.18); border-color: var(--accent); color: var(--accent); }
 
@@ -336,7 +346,8 @@ body.keyboard-open .admin-fab {
 
 /* 作品ページ：常に見えるトップへ */
 .floating-home {
-  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: 22px; left: 0; right: 0;
+  width: max-content; max-width: calc(100% - 24px); margin: 0 auto;
   z-index: 450;
   font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em;
   color: var(--accent); text-decoration: none;
@@ -393,12 +404,17 @@ body.keyboard-open .admin-fab {
 .inline-editor-toolbar select.chapter-jump:focus { border-color: var(--accent); }
 .inline-editor-toolbar .actions { display: flex; gap: 10px; margin-left: auto; flex-shrink: 0; }
 main#honbun.is-editing {
-  outline: 1px dashed rgba(154,139,122,0.35);
-  outline-offset: 10px;
+  /* outline-offset は横スクロールの原因になるため使わない */
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(154,139,122,0.35);
   border-radius: 2px;
   cursor: text;
+  max-width: 100%;
+  overflow-x: hidden;
 }
-main#honbun.is-editing:focus { outline-color: rgba(154,139,122,0.55); }
+main#honbun.is-editing:focus {
+  box-shadow: inset 0 0 0 1px rgba(154,139,122,0.55);
+}
 main#honbun.is-editing a { pointer-events: none; cursor: text; }
 main#honbun.is-editing > h2.section-title {
   font-size: 15px; font-weight: normal; color: var(--fg-dim); text-align: center;
@@ -408,7 +424,7 @@ main#honbun.is-editing > h2.section-title {
 main#honbun.is-editing > h2.section-title:first-child { margin-top: 0; }
 main#honbun.is-editing > h2.section-title.is-jump-target {
   background: rgba(154,139,122,0.12);
-  box-shadow: 0 0 0 8px rgba(154,139,122,0.12);
+  box-shadow: inset 0 0 0 4px rgba(154,139,122,0.12);
   border-radius: 2px;
   transition: background 0.4s ease, box-shadow 0.4s ease;
 }
@@ -417,9 +433,19 @@ main#honbun.is-editing > p {
 }
 main#honbun.is-editing > p.no-indent { text-indent: 0; }
 @media (max-width: 520px) {
+  html, body, #app {
+    overflow-x: hidden !important;
+    max-width: 100% !important;
+  }
+  header, main, footer, nav.work-nav, #toc, .afterword-section, .admin-bar, .inline-editor-toolbar {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
   .inline-editor-toolbar {
     margin: 8px 10px 12px; padding: 12px 12px 14px; border-radius: 14px;
     gap: 8px; top: 0; z-index: 40;
+    width: auto;
+    left: 0; right: 0;
   }
   .inline-editor-toolbar .edit-nav {
     order: 1; margin: 0 0 4px; font-size: 11px;
@@ -505,10 +531,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   var app = document.getElementById("app");
   var fab = document.getElementById("admin-fab");
 
-  /* ログイン維持のまま閲覧⇔編集を切替 */
   var manageMode = false;
   try { manageMode = sessionStorage.getItem("luna3-manage-mode") === "1"; } catch (e) {}
-
   function isAdmin() { return !!currentUser; }
   function isManaging() { return !!currentUser && manageMode; }
   function setManageMode(on) {
@@ -1142,7 +1166,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     } else if (manageMode) {
       fab.textContent = "閲覧モード";
       fab.classList.add("is-admin");
-      fab.title = "編集UIを閉じて閲覧する（ログイン維持）";
+      fab.title = "編集UIを閉じる（ログイン維持）";
     } else {
       fab.textContent = "編集モード";
       fab.classList.add("is-admin");
@@ -1150,10 +1174,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     }
   }
   fab.addEventListener("click", function () {
-    if (!isAdmin()) {
-      openLoginModal();
-      return;
-    }
+    if (!isAdmin()) { openLoginModal(); return; }
     setManageMode(!manageMode);
     if (cache) render();
   });
@@ -1210,7 +1231,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     if (logoutBtn) logoutBtn.addEventListener("click", function () {
       if (window.confirm("ログアウトしますか？")) logout();
     });
-
     var editSiteBtn = app.querySelector('[data-action="edit-site"]');
     if (editSiteBtn) editSiteBtn.addEventListener("click", function () {
       openFormModal("サイト情報を編集", [
@@ -1495,7 +1515,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       '<div class="edit-nav">' +
       '<a href="#/" data-home data-edit-home>トップページへ</a>' +
       '<a href="#toc" data-edit-toc>目次</a>' +
-      '<a href="#" data-edit-viewmode>閲覧モード</a>' +
       '</div>' +
       '<div class="hint">編集中 · 変更後は保存</div>' +
       '<div class="jump-wrap">' +
@@ -1639,7 +1658,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     main.setAttribute("contenteditable", "true");
     main.setAttribute("spellcheck", "false");
 
-    /* モバイル: キーボード表示中は編集パネルを隠す */
     var _kbBaseH = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
     var _kbTimer = null;
     function isCoarseMobile() {
@@ -1653,7 +1671,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         return;
       }
       var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-      /* 画面の約75%未満になったらキーボード開とみなす */
       var open = h < _kbBaseH * 0.82;
       toolbar.classList.toggle("is-keyboard-open", open);
       document.body.classList.toggle("keyboard-open", open);
@@ -1663,14 +1680,12 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       _kbTimer = setTimeout(syncToolbarKeyboard, 60);
     }
     function onEditorFocus() {
-      /* フォーカス時の基準高さを更新（向き変更後など） */
       if (!document.body.classList.contains("keyboard-open")) {
         _kbBaseH = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
       }
       onKbViewportChange();
     }
     function onEditorBlur() {
-      /* キーボードが閉じるまで少し待つ */
       setTimeout(function () {
         if (!main.contains(document.activeElement)) {
           toolbar.classList.remove("is-keyboard-open");
@@ -1686,7 +1701,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     window.addEventListener("resize", onKbViewportChange);
     main.addEventListener("focus", onEditorFocus, true);
     main.addEventListener("blur", onEditorBlur, true);
-    /* 入力開始でも判定（一部端末は focus 後に高さが変わる） */
     main.addEventListener("input", onKbViewportChange);
 
     function onPaste(e) {
@@ -1795,12 +1809,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         jump.style.boxShadow = "0 0 0 1px var(--accent)";
         setTimeout(function () { jump.style.boxShadow = ""; }, 1200);
       }
-    });
-    var viewModeLink = toolbar.querySelector("[data-edit-viewmode]");
-    if (viewModeLink) viewModeLink.addEventListener("click", function (e) {
-      e.preventDefault();
-      setManageMode(false);
-      if (cache) render();
     });
 
     var saveBtn = toolbar.querySelector("[data-save]");
