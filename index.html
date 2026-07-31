@@ -24,33 +24,6 @@
 html { touch-action: manipulation; scroll-behavior: smooth; }
 html, body { background: var(--bg); color: var(--fg); }
 
-/* 編集中はピンチズームを抑止＋キーボード余白 */
-body.is-editing {
-  touch-action: pan-x pan-y;
-  overscroll-behavior: none;
-}
-body.is-editing main#honbun.is-editing {
-  touch-action: pan-x pan-y;
-  -webkit-user-select: text;
-  user-select: text;
-  padding-bottom: 40vh;
-}
-/* 自動入力トラップ（画面外・非表示） */
-.autofill-trap {
-  position: fixed !important;
-  left: -10000px !important;
-  top: 0 !important;
-  width: 1px !important;
-  height: 1px !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  overflow: hidden !important;
-  z-index: -1 !important;
-  border: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-}
-
 body {
   font-family: var(--font-body);
   font-size: 16px;
@@ -274,13 +247,12 @@ main p.no-indent { text-indent: 0; }
     line-height: 1.7;
     padding: 0 8px 12px;
   }
-  /* 編集中は16px以上にして iOS のフォーカス時自動ズームを防ぐ */
-  main#honbun.is-editing > p { font-size: 16px; line-height: 1.85; margin: 0 0 1.2em; }
+  main#honbun.is-editing > p { font-size: 14px; line-height: 1.85; margin: 0 0 1.2em; }
 }
 
 /* ---------- Admin UI (styled after the LUNA3 buchi admin look) ---------- */
 .admin-fab {
-  position: fixed; top: 18px; right: 20px; z-index: 500;
+  position: fixed; bottom: 22px; right: 16px; z-index: 500;
   font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
   background: rgba(154,139,122,0.08); border: 1px solid var(--accent-soft); color: var(--accent);
   padding: 7px 18px; border-radius: 20px; cursor: pointer; transition: all 0.2s ease;
@@ -289,8 +261,7 @@ main p.no-indent { text-indent: 0; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 body.is-editing .admin-fab {
-  top: auto; bottom: 22px; right: 16px; /* 編集中は下へ移してパネルと被らない */
-  z-index: 460;
+  z-index: 460; /* 編集ツールバーより手前に出しすぎない */
 }
 body.is-editing .floating-home {
   display: none; /* 編集パネルにトップへのリンクがあるため */
@@ -457,7 +428,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     font-size: 9px; letter-spacing: 0.12em;
   }
   .inline-editor-toolbar select.chapter-jump {
-    width: 100%; max-width: none; font-size: 16px; padding: 10px 12px;
+    width: 100%; max-width: none; font-size: 14px; padding: 10px 12px;
   }
   .inline-editor-toolbar .actions {
     order: 3; width: 100%; margin-left: 0;
@@ -468,7 +439,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     width: 100%; margin: 0; padding: 10px 6px; font-size: 11px;
     text-align: center; box-sizing: border-box;
   }
-  body.is-editing .admin-fab {
+  .admin-fab {
     bottom: 18px; right: 12px; padding: 8px 14px; font-size: 9px;
   }
   body.is-editing .floating-home { display: none; }
@@ -1107,25 +1078,21 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       '<div class="modal-box">' +
       '<h3>管理者ログイン</h3>' +
       '<div class="modal-error" style="display:none"></div>' +
-      /* autocomplete を明示し、Chrome が「このフォームだけが認証欄」と認識するようにする */
-      '<form id="admin-login-form" autocomplete="on" method="post" action="javascript:void(0)">' +
-      '<label for="admin-email-input">メールアドレス</label>' +
-      '<input type="email" id="admin-email-input" name="username" autocomplete="username" inputmode="email" placeholder="admin@example.com" required />' +
-      '<label for="admin-pass-input">パスワード</label>' +
-      '<input type="password" id="admin-pass-input" name="password" autocomplete="current-password" placeholder="••••••••" required />' +
+      '<label>メールアドレス</label>' +
+      '<input type="text" placeholder="admin@example.com" id="admin-email-input" />' +
+      '<label>パスワード</label>' +
+      '<input type="password" placeholder="••••••••" id="admin-pass-input" />' +
       '<div class="modal-actions">' +
-      '<button type="button" class="btn" data-close>キャンセル</button>' +
-      '<button type="submit" class="btn primary" data-login>ログイン</button>' +
-      '</div></form></div>';
+      '<button class="btn" data-close>キャンセル</button>' +
+      '<button class="btn primary" data-login>ログイン</button>' +
+      '</div></div>';
     document.body.appendChild(overlay);
-    var form = overlay.querySelector("#admin-login-form");
     var emailInput = overlay.querySelector("#admin-email-input");
     var passInput = overlay.querySelector("#admin-pass-input");
     var errBox = overlay.querySelector(".modal-error");
     emailInput.focus();
 
-    function tryLogin(e) {
-      if (e) e.preventDefault();
+    function tryLogin() {
       errBox.style.display = "none";
       signInWithEmailAndPassword(auth, emailInput.value.trim(), passInput.value)
         .then(function () {
@@ -1136,7 +1103,9 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
           errBox.style.display = "block";
         });
     }
-    form.addEventListener("submit", tryLogin);
+    overlay.querySelector("[data-login]").addEventListener("click", tryLogin);
+    passInput.addEventListener("keydown", function (e) { if (e.key === "Enter") tryLogin(); });
+    emailInput.addEventListener("keydown", function (e) { if (e.key === "Enter") passInput.focus(); });
     overlay.querySelector("[data-close]").addEventListener("click", function () { overlay.remove(); });
     overlay.addEventListener("click", function (e) { if (e.target === overlay) overlay.remove(); });
   }
@@ -1470,127 +1439,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     return html;
   }
 
-  /* ===== 編集中: ズーム固定・自動入力誤認対策 ===== */
-  var _editViewportLocked = false;
-  var _editGestureHandler = null;
-  var _editTouchHandler = null;
-  var _editViewportMetaContent = null;
-  var _editVvHandler = null;
-  var _editAutofillTrap = null;
-
-  function lockEditViewport() {
-    if (_editViewportLocked) return;
-    _editViewportLocked = true;
-    var meta = document.querySelector('meta[name="viewport"]');
-    if (meta) {
-      _editViewportMetaContent = meta.getAttribute("content");
-      meta.setAttribute(
-        "content",
-        "width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
-      );
-    }
-    _editGestureHandler = function (e) { e.preventDefault(); };
-    document.addEventListener("gesturestart", _editGestureHandler, { passive: false });
-    document.addEventListener("gesturechange", _editGestureHandler, { passive: false });
-    document.addEventListener("gestureend", _editGestureHandler, { passive: false });
-    _editTouchHandler = function (e) {
-      if (e.touches && e.touches.length > 1) e.preventDefault();
-    };
-    document.addEventListener("touchmove", _editTouchHandler, { passive: false });
-
-    function applyKeyboardInset() {
-      var m = document.querySelector("main#honbun.is-editing");
-      if (!m) return;
-      var inset = 0;
-      if (window.visualViewport) {
-        inset = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
-      }
-      m.style.paddingBottom = Math.max(inset + 56, Math.round(window.innerHeight * 0.28)) + "px";
-    }
-    _editVvHandler = applyKeyboardInset;
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener("resize", _editVvHandler);
-      window.visualViewport.addEventListener("scroll", _editVvHandler);
-    }
-    window.addEventListener("resize", _editVvHandler);
-    applyKeyboardInset();
-  }
-
-  function unlockEditViewport() {
-    if (!_editViewportLocked) return;
-    _editViewportLocked = false;
-    var meta = document.querySelector('meta[name="viewport"]');
-    if (meta && _editViewportMetaContent != null) {
-      meta.setAttribute("content", _editViewportMetaContent);
-      _editViewportMetaContent = null;
-    }
-    if (_editGestureHandler) {
-      document.removeEventListener("gesturestart", _editGestureHandler);
-      document.removeEventListener("gesturechange", _editGestureHandler);
-      document.removeEventListener("gestureend", _editGestureHandler);
-      _editGestureHandler = null;
-    }
-    if (_editTouchHandler) {
-      document.removeEventListener("touchmove", _editTouchHandler);
-      _editTouchHandler = null;
-    }
-    if (_editVvHandler) {
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener("resize", _editVvHandler);
-        window.visualViewport.removeEventListener("scroll", _editVvHandler);
-      }
-      window.removeEventListener("resize", _editVvHandler);
-      _editVvHandler = null;
-    }
-    var m = document.querySelector("main#honbun");
-    if (m) m.style.paddingBottom = "";
-  }
-
-  /* Chrome が contenteditable をログイン欄と誤認しないための属性 */
-  function applyEditorAntiAutofill(el) {
-    if (!el) return;
-    el.setAttribute("autocomplete", "off");
-    el.setAttribute("autocorrect", "off");
-    el.setAttribute("autocapitalize", "off");
-    el.setAttribute("spellcheck", "false");
-    el.setAttribute("inputmode", "text");
-    el.setAttribute("role", "textbox");
-    el.setAttribute("aria-multiline", "true");
-    el.setAttribute("aria-autocomplete", "none");
-    /* 各種パスワードマネージャ向け */
-    el.setAttribute("data-lpignore", "true");
-    el.setAttribute("data-1p-ignore", "true");
-    el.setAttribute("data-bwignore", "true");
-    el.setAttribute("data-form-type", "other");
-    el.setAttribute("data-google-autofill", "disabled");
-    /* 認証関連の name を絶対に付けない */
-    el.removeAttribute("name");
-  }
-
-  /* 自動入力を「吸い取る」ダミー欄（編集中のみ DOM に置く） */
-  function installAutofillTrap() {
-    removeAutofillTrap();
-    var trap = document.createElement("div");
-    trap.id = "autofill-trap";
-    trap.className = "autofill-trap";
-    trap.setAttribute("aria-hidden", "true");
-    /* username / new-password のペアで Chrome の自動入力対象をここに固定させる */
-    trap.innerHTML =
-      '<input type="text" tabindex="-1" autocomplete="username" name="prevent_autofill_user" value="" readonly />' +
-      '<input type="password" tabindex="-1" autocomplete="new-password" name="prevent_autofill_pass" value="" readonly />';
-    document.body.appendChild(trap);
-    _editAutofillTrap = trap;
-  }
-
-  function removeAutofillTrap() {
-    if (_editAutofillTrap && _editAutofillTrap.parentNode) {
-      _editAutofillTrap.parentNode.removeChild(_editAutofillTrap);
-    }
-    _editAutofillTrap = null;
-    var leftover = document.getElementById("autofill-trap");
-    if (leftover && leftover.parentNode) leftover.parentNode.removeChild(leftover);
-  }
-
   function enterInlineBodyEdit(work, opts) {
     opts = opts || {};
     var main = app.querySelector("#honbun");
@@ -1750,17 +1598,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     main.classList.add("is-editing");
     document.body.classList.add("is-editing");
     main.setAttribute("contenteditable", "true");
-    applyEditorAntiAutofill(main);
-    installAutofillTrap();
-    lockEditViewport();
-    toolbar.querySelectorAll("select, input, textarea, button").forEach(function (el) {
-      applyEditorAntiAutofill(el);
-      /* ツールバーの入力は認証と無関係な name にする */
-      if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT") {
-        el.setAttribute("name", "editor-ui-" + (el.id || el.className || "field"));
-        el.setAttribute("autocomplete", "off");
-      }
-    });
+    main.setAttribute("spellcheck", "false");
 
     function onPaste(e) {
       e.preventDefault();
@@ -1876,14 +1714,9 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       main.classList.remove("is-editing");
       document.body.classList.remove("is-editing");
       main.removeAttribute("contenteditable");
-      ["spellcheck","autocomplete","autocorrect","autocapitalize","inputmode",
-       "role","aria-multiline","aria-autocomplete",
-       "data-lpignore","data-1p-ignore","data-bwignore","data-form-type","data-google-autofill"
-      ].forEach(function (a) { main.removeAttribute(a); });
+      main.removeAttribute("spellcheck");
       main.removeEventListener("paste", onPaste);
       main.removeEventListener("drop", onDrop);
-      removeAutofillTrap();
-      unlockEditViewport();
     }
 
     saveBtn.addEventListener("click", async function () {
@@ -1898,11 +1731,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       } catch (err) {
         alert("保存に失敗しました: " + (err && err.message ? err.message : err));
         main.classList.add("is-editing");
-        document.body.classList.add("is-editing");
         main.setAttribute("contenteditable", "true");
-        applyEditorAntiAutofill(main);
-        installAutofillTrap();
-        lockEditViewport();
+        main.setAttribute("spellcheck", "false");
         main.addEventListener("paste", onPaste);
         main.addEventListener("drop", onDrop);
         saveBtn.textContent = "保存";
@@ -1914,9 +1744,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   /* ===== ハッシュ変更でのルーティング（"#/"で始まるもののみ） ===== */
   window.addEventListener("hashchange", function () {
     if (location.hash.indexOf("#/") === 0 || location.hash === "") {
-      removeAutofillTrap();
-      unlockEditViewport();
-      document.body.classList.remove("is-editing");
       render();
     }
   });
