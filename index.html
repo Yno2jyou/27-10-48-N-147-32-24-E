@@ -340,12 +340,15 @@ body.keyboard-open .admin-fab { display: none !important; }
   border-radius: 20px; padding: 5px 12px; background: rgba(6,5,8,0.75); cursor: pointer; transition: all 0.2s ease;
 }
 .work-card-admin-btn:hover { background: rgba(154,139,122,0.16); color: var(--fg); }
-.work-card-delete-btn { top: 14px; right: 148px; color: #c45c5c; border-color: rgba(196,92,92,0.45); }
+.work-card-delete-btn { top: 14px; right: 214px; color: #c45c5c; border-color: rgba(196,92,92,0.45); }
 .work-card-delete-btn:hover { background: rgba(196,92,92,0.14); color: #ef8888; border-color: rgba(196,92,92,0.7); }
-.work-card-publish-btn { top: 14px; right: 72px; color: #7a9a7a; border-color: rgba(122,154,122,0.45); }
+.work-card-publish-btn { top: 14px; right: 136px; color: #7a9a7a; border-color: rgba(122,154,122,0.45); }
 .work-card-publish-btn:hover { background: rgba(122,154,122,0.14); color: #a8c8a8; border-color: rgba(122,154,122,0.7); }
 .work-card-publish-btn.is-private { color: #9a8b7a; border-color: rgba(154,139,122,0.45); }
 .work-card-publish-btn.is-private:hover { background: rgba(154,139,122,0.14); color: var(--fg); border-color: var(--accent); }
+.work-card-secret-btn { top: 14px; right: 72px; color: #8a7a9a; border-color: rgba(138,122,154,0.5); }
+.work-card-secret-btn:hover { background: rgba(138,122,154,0.16); color: #c4b4d4; border-color: rgba(138,122,154,0.75); }
+.work-card-secret-btn.is-secret { color: #c4a0d4; border-color: rgba(180,140,200,0.55); background: rgba(138,122,154,0.12); }
 .work-card.is-unpublished { opacity: 0.72; }
 .work-card.is-unpublished .work-title::after {
   content: " 非公開";
@@ -354,6 +357,17 @@ body.keyboard-open .admin-fab { display: none !important; }
   letter-spacing: 0.12em;
   color: var(--fg-dim);
   vertical-align: middle;
+}
+.work-card.is-secret-flag .work-title::after {
+  content: " 隠し";
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: #a890b8;
+  vertical-align: middle;
+}
+.work-card.is-unpublished.is-secret-flag .work-title::after {
+  content: " 非公開・隠し";
 }
 .work-page-admin-bar { text-align: center; margin-bottom: 12px; }
 
@@ -366,11 +380,24 @@ body.is-inverted video,
 body.is-inverted canvas {
   filter: invert(1) hue-rotate(180deg);
 }
-.site-title, .site-subtitle {
-  cursor: default;
+header .site-title, header .site-subtitle {
+  cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
+  position: relative;
+  z-index: 5;
+}
+header .site-title {
+  padding: 12px 16px;
+  margin-left: -16px;
+  margin-right: -16px;
+}
+header .site-subtitle {
+  padding: 10px 16px;
+  margin-left: -16px;
+  margin-right: -16px;
+  display: inline-block;
 }
 .work-card.is-secret-unlocked {
   border-color: rgba(154, 139, 122, 0.55);
@@ -563,29 +590,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
   const DEFAULTS = JSON.parse(document.getElementById("site-data").textContent);
 
-  /* 隠し作品：夭折した天使たち（通常は非表示。解放後に一覧へ） */
-  var SECRET_WORK_ID = "fallen-angels";
-  var SECRET_WORK = {
-    id: SECRET_WORK_ID,
-    number: "∅",
-    title: "夭折した天使たち",
-    subtitle: "Fallen Angels",
-    desc: "星の降る夜にだけ、姿を現す物語。",
-    content: '<div id="toc">\n  <ol>\n    <li><a href="#ch0">プロローグ</a></li>\n  </ol>\n</div>\n\n<main id="honbun">\n  <div class="section" id="ch0">\n    <h2 class="section-title">プロローグ</h2>\n    <p>夜空に流れ星が落ちるとき、誰かの記憶がそっと解ける。</p>\n    <p class="no-indent">ここには、まだ書かれていない物語がある。</p>\n  </div>\n</main>',
-    order: 999,
-    published: true,
-    secret: true
-  };
-  (function ensureSecretInDefaults() {
-    var has = (DEFAULTS.works || []).some(function (w) { return w.id === SECRET_WORK_ID || w.title === "夭折した天使たち"; });
-    if (!has) DEFAULTS.works.push(Object.assign({}, SECRET_WORK));
-    else {
-      DEFAULTS.works.forEach(function (w) {
-        if (w.id === SECRET_WORK_ID || w.title === "夭折した天使たち") w.secret = true;
-      });
-    }
-  })();
-
+  /* 隠し作品：管理画面の「隠し」で secret:true にした作品が対象 */
   function isSecretUnlocked() {
     try { return sessionStorage.getItem("luna3-secret-unlocked") === "1"; } catch (e) { return false; }
   }
@@ -593,7 +598,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     try { sessionStorage.setItem("luna3-secret-unlocked", v ? "1" : "0"); } catch (e) {}
   }
   function isWorkVisible(w) {
-    // 編集モードではすべて表示。閲覧時は公開かつ（秘密なら解放済み）のみ
     if (isManaging()) return true;
     if (w.published === false) return false;
     if (w.secret && !isSecretUnlocked()) return false;
@@ -884,27 +888,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         });
       });
       await batch.commit();
-    } else {
-      // 既存環境でも隠し作品ドキュメントが無ければ追加
-      var secretRef = doc(db, "site_works", SECRET_WORK_ID);
-      var secretSnap = await getDoc(secretRef);
-      if (!secretSnap.exists()) {
-        var maxOrder = 0;
-        worksSnap.forEach(function (d) {
-          var o = (d.data() && d.data().order) || 0;
-          if (o > maxOrder) maxOrder = o;
-        });
-        await setDoc(secretRef, {
-          number: SECRET_WORK.number,
-          title: SECRET_WORK.title,
-          subtitle: SECRET_WORK.subtitle,
-          desc: SECRET_WORK.desc,
-          content: SECRET_WORK.content,
-          order: maxOrder + 1,
-          published: true,
-          secret: true
-        });
-      }
     }
   }
 
@@ -929,14 +912,9 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       worksSnap.forEach(function (d) {
         var row = Object.assign({ id: d.id }, d.data());
         if (row.published === undefined) row.published = true;
-        if (row.secret === undefined) {
-          row.secret = (row.id === SECRET_WORK_ID || row.title === "夭折した天使たち");
-        }
+        if (row.secret === undefined) row.secret = false;
         works.push(row);
       });
-      if (!works.some(function (w) { return w.id === SECRET_WORK_ID || w.title === "夭折した天使たち"; })) {
-        works.push(Object.assign({}, SECRET_WORK));
-      }
       works.sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
       cache = {
         site: Object.assign({ title: "", subtitle: "", epigraph: "", catchcopy: "", subcopy: "" }, meta.site || {}),
@@ -1001,7 +979,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       desc: plainToBr(fields.desc || ""),
       content: content,
       order: order,
-      published: true
+      published: true,
+      secret: false
     });
     return id;
   }
@@ -1168,10 +1147,16 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       var isPub = w.published !== false;
       var cardClass = "work-card";
       if (isManaging() && !isPub) cardClass += " is-unpublished";
-      if (w.secret && (isSecretUnlocked() || isManaging())) cardClass += " is-secret-unlocked";
+      if (isManaging() && w.secret) cardClass += " is-secret-flag";
+      if (w.secret && isSecretUnlocked() && !isManaging()) cardClass += " is-secret-unlocked";
       html += '<div class="' + cardClass + '" data-route="#/work/' + encodeURIComponent(w.id) + '">';
       if (isManaging()) {
         html += '<button class="work-card-admin-btn" data-action="edit-work" data-id="' + esc(w.id) + '">編集</button>';
+        if (w.secret) {
+          html += '<button class="work-card-admin-btn work-card-secret-btn is-secret" data-action="toggle-secret" data-id="' + esc(w.id) + '" data-secret="1">解除</button>';
+        } else {
+          html += '<button class="work-card-admin-btn work-card-secret-btn" data-action="toggle-secret" data-id="' + esc(w.id) + '" data-secret="0">隠し</button>';
+        }
         if (isPub) {
           html += '<button class="work-card-admin-btn work-card-publish-btn" data-action="toggle-publish" data-id="' + esc(w.id) + '" data-published="1">非公開</button>';
         } else {
@@ -1202,12 +1187,12 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
   /* ===== 隠し仕様（イースターエッグ） ===== */
   var _eggTitleTaps = 0;
-  var _eggTitleTimer = null;
+  var _eggTitleLast = 0;
   var _eggSubTaps = 0;
-  var _eggSubTimer = null;
-  var _eggPhase = "idle"; // idle | after-meteor
+  var _eggSubLast = 0;
+  var _eggPhase = "idle";
   var _eggPhaseTimer = null;
-  var TAP_GAP = 700;
+  var TAP_GAP = 1200;
 
   function attachEasterEggs() {
     var titleEl = app.querySelector("header .site-title");
@@ -1216,66 +1201,52 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
     function onTitleTap(e) {
       if (e) { e.preventDefault(); e.stopPropagation(); }
-      if (_eggTitleTimer) clearTimeout(_eggTitleTimer);
+      var now = Date.now();
+      if (now - _eggTitleLast > TAP_GAP) _eggTitleTaps = 0;
+      _eggTitleLast = now;
       _eggTitleTaps += 1;
-      _eggTitleTimer = setTimeout(function () {
-        _eggTitleTaps = 0;
-      }, TAP_GAP);
 
-      // フェーズ：流星群のあとにタイトル3回で秘密解放
       if (_eggPhase === "after-meteor") {
         if (_eggTitleTaps >= 3) {
           _eggTitleTaps = 0;
-          if (_eggTitleTimer) clearTimeout(_eggTitleTimer);
           unlockSecretWork();
         }
         return;
       }
-
-      // 通常：タイトル5回で流星群
       if (_eggTitleTaps >= 5) {
         _eggTitleTaps = 0;
-        if (_eggTitleTimer) clearTimeout(_eggTitleTimer);
         startMeteorShower(30000);
         _eggPhase = "after-meteor";
         if (_eggPhaseTimer) clearTimeout(_eggPhaseTimer);
-        // 流星群終了後もしばらく（合計約45秒）3タップ受付
-        _eggPhaseTimer = setTimeout(function () {
-          _eggPhase = "idle";
-        }, 45000);
+        _eggPhaseTimer = setTimeout(function () { _eggPhase = "idle"; }, 45000);
       }
     }
 
     function onSubTap(e) {
       if (e) { e.preventDefault(); e.stopPropagation(); }
-      if (_eggSubTimer) clearTimeout(_eggSubTimer);
+      var now = Date.now();
+      if (now - _eggSubLast > TAP_GAP) _eggSubTaps = 0;
+      _eggSubLast = now;
       _eggSubTaps += 1;
-      _eggSubTimer = setTimeout(function () {
-        _eggSubTaps = 0;
-      }, TAP_GAP);
       if (_eggSubTaps >= 3) {
         _eggSubTaps = 0;
-        if (_eggSubTimer) clearTimeout(_eggSubTimer);
         document.body.classList.toggle("is-inverted");
       }
     }
 
     function bindTap(el, handler) {
       if (!el) return;
-      // touch と click の二重発火を防ぐ
-      var last = 0;
-      el.addEventListener("click", function (e) {
-        var now = Date.now();
-        if (now - last < 350) return;
-        last = now;
-        handler(e);
-      });
-      el.addEventListener("touchend", function (e) {
-        var now = Date.now();
-        if (now - last < 350) return;
-        last = now;
-        handler(e);
-      }, { passive: false });
+      if (el.getAttribute("data-egg-bound") === "1") return;
+      el.setAttribute("data-egg-bound", "1");
+      var lastFire = 0;
+      function fire(ev) {
+        var t = Date.now();
+        if (t - lastFire < 280) return;
+        lastFire = t;
+        handler(ev);
+      }
+      el.addEventListener("pointerup", fire);
+      el.addEventListener("click", fire);
     }
 
     bindTap(titleEl, onTitleTap);
@@ -1283,28 +1254,24 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   }
 
   function unlockSecretWork() {
-    if (isSecretUnlocked()) {
-      // すでに解放済みなら該当カードへスクロール
-      var card = app.querySelector('.work-card[data-route="#/work/' + encodeURIComponent(SECRET_WORK_ID) + '"]');
-      if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
+    var secrets = (cache && cache.works) ? cache.works.filter(function (w) { return !!w.secret; }) : [];
+    if (!secrets.length) return;
     setSecretUnlocked(true);
     _eggPhase = "idle";
-    if (cache) {
-      // 一覧を再描画して秘密作品を表示
-      renderHome(cache);
-      setTimeout(function () {
-        var card = app.querySelector('.work-card[data-route="#/work/' + encodeURIComponent(SECRET_WORK_ID) + '"]');
-        if (card) {
-          card.scrollIntoView({ behavior: "smooth", block: "center" });
-          card.style.transition = "box-shadow 0.6s ease, border-color 0.6s ease";
-          card.style.boxShadow = "0 0 32px rgba(200, 190, 170, 0.28)";
-          setTimeout(function () { card.style.boxShadow = ""; }, 2200);
-        }
-      }, 80);
-    }
+    if (!cache) return;
+    renderHome(cache);
+    setTimeout(function () {
+      var first = secrets[0];
+      var card = app.querySelector('.work-card[data-route="#/work/' + encodeURIComponent(first.id) + '"]');
+      if (card) {
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+        card.style.transition = "box-shadow 0.6s ease, border-color 0.6s ease";
+        card.style.boxShadow = "0 0 32px rgba(200, 190, 170, 0.28)";
+        setTimeout(function () { card.style.boxShadow = ""; }, 2200);
+      }
+    }, 80);
   }
+
 
 
   function renderWork(data, work) {
@@ -1551,6 +1518,28 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         }
         var id = await createWork(result);
         location.hash = "#/work/" + encodeURIComponent(id);
+      });
+    });
+
+    app.querySelectorAll('[data-action="toggle-secret"]').forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var id = btn.getAttribute("data-id");
+        var currentlySecret = btn.getAttribute("data-secret") === "1";
+        var next = !currentlySecret;
+        var msg = next
+          ? "この作品を「隠し要素」にしますか？\n（通常の一覧には出ず、イースターエッグ解放後に表示されます）"
+          : "この作品の隠し設定を解除しますか？\n（通常の一覧に表示されるようになります）";
+        if (!window.confirm(msg)) return;
+        saveWork(id, { secret: next }).then(function () {
+          return refresh().then(function () {
+            if (cache && !(cache.works || []).some(function (w) { return !!w.secret; })) {
+              setSecretUnlocked(false);
+            }
+          });
+        }).catch(function (err) {
+          alert("隠し設定の変更に失敗しました: " + (err && err.message ? err.message : err));
+        });
       });
     });
 
