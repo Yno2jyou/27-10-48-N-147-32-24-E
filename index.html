@@ -188,7 +188,26 @@ nav.work-nav a { margin: 0 10px; border-bottom: 1px dotted var(--accent); }
 .section:first-child { margin-top: 0; }
 .section-title {
   font-size: 15px; font-weight: normal; color: var(--fg-dim); text-align: center;
-  letter-spacing: 0.2em; margin: 0 0 40px; padding-bottom: 16px; border-bottom: 1px solid var(--line);
+  letter-spacing: 0.2em; margin: 0 0 40px; padding: 0 12px 16px;
+  border-bottom: 1px solid var(--line);
+  /* 文字の途中では折り返さず、softBreakTitle の <wbr>（、の直後）だけで改行 */
+  word-break: keep-all;
+  line-break: strict;
+  overflow-wrap: normal;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+/* 目次：折り返したとき二行目を「：」から三字ほど右に（入りきるときは一行のまま） */
+#toc a {
+  display: inline-block;
+  max-width: 100%;
+  line-height: 1.7;
+  word-break: keep-all;
+  line-break: strict;
+  overflow-wrap: normal;
+  padding-left: 6em;
+  text-indent: -6em;
+  box-sizing: border-box;
 }
 main p { margin: 0 0 1.4em; text-indent: 1em; }
 main p.no-indent { text-indent: 0; }
@@ -218,6 +237,16 @@ main p.no-indent { text-indent: 0; }
   .work-card { padding: 28px 22px 26px; }
   .work-title { font-size: 17px; }
   .epigraph { padding: 0 18px; font-size: 12.5px; }
+  .section-title {
+    letter-spacing: 0.06em;
+    line-height: 1.7;
+    padding: 0 8px 12px;
+  }
+  main#honbun.is-editing > h2.section-title {
+    letter-spacing: 0.06em;
+    line-height: 1.7;
+    padding: 0 8px 12px;
+  }
   main#honbun.is-editing > p { font-size: 14px; line-height: 1.85; margin: 0 0 1.2em; }
 }
 
@@ -438,11 +467,14 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
-  /* ===== プレーンテキスト ↔ HTML 変換 =====
-     管理画面では HTML タグを書かず、ふつうの文章をそのまま貼るだけでよい。
-     ・短い文（エピグラフ・紹介文）: 改行がそのまま改行になる
-     ・本文: 空行で段落、行頭の「# 見出し」で章立て（目次も自動生成）
-  ===== */
+  /** 長い章タイトル用：：や、の直後で改行しやすくする */
+          function softBreakTitle(text) {
+    var t = esc(String(text == null ? "" : text));
+    // 入りきらないときだけ「、」の直後で折り返せるようにする（強制改行はしない）
+    t = t.replace(/([、,])/g, "$1<wbr>");
+    return t;
+  }
+
   function looksLikeHtml(s) {
     return /<[a-zA-Z][\s\S]*>/.test(String(s || ""));
   }
@@ -558,10 +590,10 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       chIndex += 1;
       var displayTitle = title || (chapters.length === 1 ? "" : ("第" + chIndex + "話"));
       if (displayTitle) {
-        tocItems.push('<li><a href="#' + id + '">' + esc(displayTitle) + "</a></li>");
+        tocItems.push('<li><a href="#' + id + '">' + softBreakTitle(displayTitle) + "</a></li>");
       }
       var titleHtml = displayTitle
-        ? '  <h2 class="section-title">' + esc(displayTitle) + "</h2>\n"
+        ? '  <h2 class="section-title">' + softBreakTitle(displayTitle) + "</h2>\n"
         : "";
       sectionsHtml.push(
         '<div class="section" id="' + id + '">\n' +
@@ -637,12 +669,36 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     return html.trim();
   }
 
+    function applyTitleSoftBreaks(html) {
+    html = String(html || "");
+    // 章タイトル
+    html = html.replace(
+      /(<h2\b[^>]*class="[^"]*section-title[^"]*"[^>]*>)([\s\S]*?)(<\/h2>)/gi,
+      function (_, open, inner, close) {
+        var text = inner.replace(/<[^>]+>/g, "")
+          .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+        return open + softBreakTitle(text) + close;
+      }
+    );
+    // 目次リンク
+    html = html.replace(
+      /(<a\b[^>]*href="#ch\d+"[^>]*>)([\s\S]*?)(<\/a>)/gi,
+      function (_, open, inner, close) {
+        var text = inner.replace(/<[^>]+>/g, "")
+          .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+        return open + softBreakTitle(text) + close;
+      }
+    );
+    return html;
+  }
+
+
   function formatContent(s) {
     if (s == null || s === "") return "";
     if (looksLikeHtml(s) && (s.indexOf("class=\"section\"") >= 0 || s.indexOf("<p") >= 0 || s.indexOf("id=\"toc\"") >= 0)) {
-      return normalizeWorkHtml(s);
+      return applyTitleSoftBreaks(normalizeWorkHtml(s));
     }
-    return plainToContent(s);
+    return applyTitleSoftBreaks(plainToContent(s));
   }
 
   /* ===== Firestore 初期化・読み込み =====
@@ -1209,7 +1265,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     var html = "";
     parts.forEach(function (part) {
       if (part.kind === "h2") {
-        html += '<h2 class="section-title">' + esc(part.text) + "</h2>\n";
+        html += '<h2 class="section-title">' + softBreakTitle(part.text) + "</h2>\n";
       } else {
         html += "<p" + (part.noIndent ? ' class="no-indent"' : "") + ">" + esc(part.text) + "</p>\n";
       }
@@ -1283,10 +1339,10 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       chIndex += 1;
       var displayTitle = title || (chapters.length === 1 ? "" : ("第" + chIndex + "話"));
       if (displayTitle) {
-        tocItems.push('<li><a href="#' + id + '">' + esc(displayTitle) + "</a></li>");
+        tocItems.push('<li><a href="#' + id + '">' + softBreakTitle(displayTitle) + "</a></li>");
       }
       var titleHtml = displayTitle
-        ? '  <h2 class="section-title">' + esc(displayTitle) + "</h2>\n"
+        ? '  <h2 class="section-title">' + softBreakTitle(displayTitle) + "</h2>\n"
         : "";
       sectionsHtml.push(
         '<div class="section" id="' + id + '">\n' +
@@ -1316,7 +1372,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       if (!line) return;
       var hm = line.match(/^#+\s+(.+)$/);
       if (hm) {
-        html += '<h2 class="section-title">' + esc(hm[1].trim()) + "</h2>";
+        html += '<h2 class="section-title">' + softBreakTitle(hm[1].trim()) + "</h2>";
         return;
       }
       var noIndent = /^[「『（(\[【─―—]/.test(line);
