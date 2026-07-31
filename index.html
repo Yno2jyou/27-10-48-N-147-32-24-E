@@ -143,7 +143,7 @@ p.site-title { font-size: 20px; font-weight: normal; }
 
 main { max-width: var(--max-width); margin: 0 auto; padding: 40px 24px 100px; }
 
-.intro { text-align: center; font-size: 14px; color: var(--fg-dim); line-height: 2.05; margin: -24px 0 56px; letter-spacing: 0.04em; }
+.intro { text-align: center; font-size: 14px; color: var(--fg-dim); line-height: 2.05; margin: -24px 0 20px; letter-spacing: 0.04em; }
 .intro p { margin: 0 0 1.1em; }
 
 .works { display: flex; flex-direction: column; gap: 28px; }
@@ -174,7 +174,7 @@ footer {
 footer p { margin: 6px 0; line-height: 1.9; }
 
 /* work-page specific (ported from individual work files) */
-nav.work-nav { max-width: var(--max-width); margin: 0 auto; padding: 0 24px 40px; text-align: center; font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); }
+nav.work-nav { max-width: var(--max-width); margin: 36px auto 0; padding: 0 24px 28px; text-align: center; font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); }
 nav.work-nav a { margin: 0 10px; border-bottom: 1px dotted var(--accent); }
 
 #toc { max-width: var(--max-width); margin: 0 auto 48px; padding: 0 24px; display: none; }
@@ -268,7 +268,7 @@ main p.no-indent { text-indent: 0; }
 .modal-error { color: #ef4444; font-size: 12px; margin: -10px 0 16px; letter-spacing: 0.04em; }
 
 .admin-bar {
-  max-width: var(--max-width); margin: 24px auto; padding: 12px 20px; display: flex; align-items: center;
+  max-width: var(--max-width); margin: 8px auto 32px; padding: 12px 20px; display: flex; align-items: center;
   justify-content: center; gap: 12px; background: rgba(154,139,122,0.06);
   border: 1px solid var(--accent-soft); border-radius: 20px; font-family: var(--font-mono); font-size: 10px;
   color: var(--accent); letter-spacing: 0.14em; text-transform: uppercase; flex-wrap: wrap;
@@ -844,6 +844,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     html += '<div class="header-rule"></div>';
     html += '</header>';
     html += '<main>';
+    html += '<div class="intro" id="epigraph-area">' + formatShort(data.site.epigraph) + '</div>';
     if (isAdmin()) {
       html += adminBar(
         '<button class="btn" data-action="edit-site">サイト情報を編集</button>' +
@@ -851,7 +852,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         '<button class="btn primary" data-action="add-work">作品を追加</button>'
       );
     }
-    html += '<div class="intro" id="epigraph-area">' + formatShort(data.site.epigraph) + '</div>';
     html += '<div class="works">';
     data.works.forEach(function (w) {
       html += '<div class="work-card" data-route="#/work/' + encodeURIComponent(w.id) + '">';
@@ -887,16 +887,15 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     html += '<div class="header-rule"></div>';
     html += '</header>';
     html += '<nav class="work-nav"><a href="#/" data-home>トップページへ</a> <a href="#toc">目次</a></nav>';
-    if (isAdmin()) {
-      html += '<div class="work-page-admin-bar">' + adminBar('<button class="btn" data-action="edit-work-body" data-id="' + esc(work.id) + '">本文を編集</button>') + '</div>';
-    }
     html += '<main id="honbun">' + formatContent(work.content) + '</main>';
     html += '<nav class="work-nav"><a href="#/" data-home>トップページへ</a></nav>';
     html += '<footer><p>&copy; 2026 ' + esc(work.title) + '</p></footer>';
     app.innerHTML = html;
 
     attachWorkInteractions();
-    if (isAdmin()) attachWorkAdminHandlers(data, work);
+    if (isAdmin()) {
+      setTimeout(function () { enterInlineBodyEdit(work); }, 0);
+    }
   }
 
   /* ===== 作品ページ内の目次・あとがき挙動（イベント委譲） ===== */
@@ -1123,33 +1122,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     });
   }
 
-  function attachWorkAdminHandlers(data, work) {
-    var bodyBtn = app.querySelector('[data-action="edit-work-body"]');
-    if (bodyBtn) bodyBtn.addEventListener("click", function () {
-      enterInlineBodyEdit(work);
-    });
-
-    // 各章見出しの横から、その章へジャンプして編集開始
-    app.querySelectorAll("#honbun .section").forEach(function (sec) {
-      var titleEl = sec.querySelector(".section-title");
-      if (!titleEl) return;
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "btn section-edit-btn";
-      btn.textContent = "この章を編集";
-      btn.style.cssText = "display:block;margin:0 auto 24px;font-size:10px;padding:6px 14px;";
-      btn.addEventListener("click", function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var t = (titleEl.textContent || "").trim();
-        enterInlineBodyEdit(work, { focusTitle: t });
-      });
-      // 見出しの直後に挿入
-      if (titleEl.nextSibling) sec.insertBefore(btn, titleEl.nextSibling);
-      else sec.appendChild(btn);
-    });
-  }
-
   function unwrapNestedMains(root) {
     var guard = 0;
     while (guard++ < 20) {
@@ -1358,7 +1330,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     toolbar.className = "inline-editor-toolbar";
     toolbar.id = "inline-editor-toolbar";
     toolbar.innerHTML =
-      '<div class="hint">本文を直接編集中（章を選ぶとそこにジャンプします）</div>' +
+      '<div class="hint">編集モード（章の移動・追加・削除ができます。終わったら保存）</div>' +
       '<div class="jump-wrap">' +
       '<label for="chapter-jump">章へ移動</label>' +
       '<select id="chapter-jump" class="chapter-jump"></select>' +
