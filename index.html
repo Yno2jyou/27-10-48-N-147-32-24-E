@@ -303,6 +303,15 @@ main p.no-indent { text-indent: 0; }
   font-family: var(--font-mono); font-size: 11px; color: var(--accent);
   letter-spacing: 0.1em;
 }
+.inline-editor-toolbar .edit-nav {
+  flex: 1 1 100%; text-align: center; margin-bottom: 2px;
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em;
+}
+.inline-editor-toolbar .edit-nav a {
+  margin: 0 12px; color: var(--accent); border-bottom: 1px dotted var(--accent-soft);
+  text-decoration: none;
+}
+.inline-editor-toolbar .edit-nav a:hover { color: var(--fg); border-bottom-color: var(--fg-dim); }
 .inline-editor-toolbar .hint {
   flex: 1 1 100%; color: var(--fg-dim); line-height: 1.6; letter-spacing: 0.06em;
 }
@@ -1330,6 +1339,10 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     toolbar.className = "inline-editor-toolbar";
     toolbar.id = "inline-editor-toolbar";
     toolbar.innerHTML =
+      '<div class="edit-nav">' +
+      '<a href="#/" data-home data-edit-home>トップページへ</a>' +
+      '<a href="#toc" data-edit-toc>目次</a>' +
+      '</div>' +
       '<div class="hint">編集モード（章の移動・追加・削除ができます。終わったら保存）</div>' +
       '<div class="jump-wrap">' +
       '<label for="chapter-jump">章へ移動</label>' +
@@ -1338,7 +1351,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       '<div class="actions">' +
       '<button type="button" class="btn" data-add-chapter>章を追加</button>' +
       '<button type="button" class="btn" data-del-chapter>章を削除</button>' +
-      '<button type="button" class="btn" data-cancel>キャンセル</button>' +
       '<button type="button" class="btn primary" data-save>保存</button>' +
       '</div>';
     main.parentNode.insertBefore(toolbar, main);
@@ -1560,8 +1572,27 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       window.scrollTo(0, Math.max(0, toolbar.getBoundingClientRect().top + window.pageYOffset - 8));
     }
 
+    // トップページへ / 目次
+    var homeLink = toolbar.querySelector("[data-edit-home]");
+    if (homeLink) homeLink.addEventListener("click", function (e) {
+      e.preventDefault();
+      location.hash = "#/";
+    });
+    var tocLink = toolbar.querySelector("[data-edit-toc]");
+    if (tocLink) tocLink.addEventListener("click", function (e) {
+      e.preventDefault();
+      // 編集中はフラット構造のため、章選択を開いて目次代わりにする
+      jump.focus();
+      try { jump.click(); } catch (err) {}
+      // 一覧を見やすくするため、先頭の章へスクロールも可能にする
+      if (jump.options.length > 1) {
+        // セレクトを強調
+        jump.style.boxShadow = "0 0 0 1px var(--accent)";
+        setTimeout(function () { jump.style.boxShadow = ""; }, 1200);
+      }
+    });
+
     var saveBtn = toolbar.querySelector("[data-save]");
-    var cancelBtn = toolbar.querySelector("[data-cancel]");
 
     function clearEditAttrs() {
       main.classList.remove("is-editing");
@@ -1571,16 +1602,9 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       main.removeEventListener("drop", onDrop);
     }
 
-    cancelBtn.addEventListener("click", function () {
-      clearEditAttrs();
-      if (toolbar.parentNode) toolbar.parentNode.removeChild(toolbar);
-      refresh();
-    });
-
     saveBtn.addEventListener("click", async function () {
       saveBtn.textContent = "保存中...";
       saveBtn.disabled = true;
-      cancelBtn.disabled = true;
       try {
         clearEditAttrs();
         var html = rebuildWorkHtmlFromFlat(main);
@@ -1596,7 +1620,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         main.addEventListener("drop", onDrop);
         saveBtn.textContent = "保存";
         saveBtn.disabled = false;
-        cancelBtn.disabled = false;
       }
     });
   }
