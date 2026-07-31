@@ -278,36 +278,38 @@ main p.no-indent { text-indent: 0; }
 .work-page-admin-bar { text-align: center; margin-bottom: 12px; }
 
 
-/* ---------- Inline body editor ---------- */
-.inline-editor-wrap {
-  max-width: var(--max-width); margin: 0 auto; padding: 0 24px 40px;
-}
+/* ---------- Inline body editor (WYSIWYG) ---------- */
 .inline-editor-toolbar {
   position: sticky; top: 0; z-index: 40;
+  max-width: var(--max-width); margin: 0 auto 8px;
+  padding: 12px 24px;
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
-  padding: 14px 0 16px; margin-bottom: 12px;
-  background: linear-gradient(180deg, rgba(6,5,8,0.97) 70%, rgba(6,5,8,0.85) 100%);
-  border-bottom: 1px solid var(--line);
+  background: rgba(14, 12, 14, 0.92);
+  border: 1px solid var(--accent-soft); border-radius: 20px;
+  backdrop-filter: blur(12px);
+  font-family: var(--font-mono); font-size: 11px; color: var(--accent);
+  letter-spacing: 0.1em;
 }
 .inline-editor-toolbar .hint {
-  flex: 1 1 100%; font-family: var(--font-mono); font-size: 11px;
-  color: var(--fg-dim); letter-spacing: 0.06em; line-height: 1.7;
+  flex: 1 1 auto; color: var(--fg-dim); line-height: 1.6; letter-spacing: 0.06em;
 }
-.inline-editor-toolbar .actions {
-  display: flex; gap: 10px; margin-left: auto;
+.inline-editor-toolbar .actions { display: flex; gap: 10px; margin-left: auto; }
+main#honbun.is-editing {
+  outline: 1px dashed var(--accent-soft);
+  outline-offset: 12px;
+  border-radius: 2px;
+  cursor: text;
 }
-#inline-body-editor {
-  width: 100%; min-height: 70vh; resize: vertical;
-  background: rgba(12,10,12,0.9); border: 1px solid var(--line);
-  color: var(--fg); border-radius: 2px;
-  padding: 28px 24px; font-family: var(--font-body); font-size: 15px;
-  line-height: 2.0; letter-spacing: 0.03em;
-  outline: none; white-space: pre-wrap;
+main#honbun.is-editing #toc { pointer-events: none; opacity: 0.45; user-select: none; }
+main#honbun.is-editing a { pointer-events: none; cursor: text; }
+main#honbun.is-editing .section-title:focus,
+main#honbun.is-editing p:focus { outline: none; }
+main#honbun.is-editing p:hover,
+main#honbun.is-editing .section-title:hover {
+  background: rgba(154,139,122,0.06);
 }
-#inline-body-editor:focus { border-color: var(--accent-soft); }
 @media (max-width: 520px) {
-  .inline-editor-wrap { padding: 0 12px 32px; }
-  #inline-body-editor { padding: 18px 14px; font-size: 14px; min-height: 60vh; }
+  .inline-editor-toolbar { margin: 0 12px 8px; padding: 10px 14px; border-radius: 14px; }
 }
 
 </style>
@@ -999,38 +1001,57 @@ main p.no-indent { text-indent: 0; }
 
   function enterInlineBodyEdit(work) {
     var main = app.querySelector("#honbun");
-    if (!main) return;
+    if (!main || main.classList.contains("is-editing")) return;
 
-    // hide navs that interfere
     app.querySelectorAll("nav.work-nav").forEach(function (n) { n.style.display = "none"; });
     var adminBarEl = app.querySelector(".work-page-admin-bar");
     if (adminBarEl) adminBarEl.style.display = "none";
 
-    var plain = contentToPlain(work.content);
-    var wrap = document.createElement("div");
-    wrap.className = "inline-editor-wrap";
-    wrap.id = "inline-editor-root";
-    wrap.innerHTML =
-      '<div class="inline-editor-toolbar">' +
-      '<div class="hint">本文を編集中 — 空行で段落、行頭「# タイトル」で章立て、「」始まりは字下げなし。HTMLタグは不要です。</div>' +
+    var toolbar = document.createElement("div");
+    toolbar.className = "inline-editor-toolbar";
+    toolbar.id = "inline-editor-toolbar";
+    toolbar.innerHTML =
+      '<div class="hint">本文を直接編集中（見た目のまま文字を直せます）</div>' +
       '<div class="actions">' +
       '<button type="button" class="btn" data-cancel>キャンセル</button>' +
       '<button type="button" class="btn primary" data-save>保存</button>' +
-      '</div></div>' +
-      '<textarea id="inline-body-editor" spellcheck="false"></textarea>';
+      '</div>';
 
-    main.replaceWith(wrap);
-    var ta = wrap.querySelector("#inline-body-editor");
-    ta.value = plain;
-    ta.focus();
-    // place caret at top
-    ta.setSelectionRange(0, 0);
-    window.scrollTo(0, 0);
+    main.parentNode.insertBefore(toolbar, main);
+    main.classList.add("is-editing");
+    main.setAttribute("contenteditable", "true");
+    main.setAttribute("spellcheck", "false");
 
-    var saveBtn = wrap.querySelector("[data-save]");
-    var cancelBtn = wrap.querySelector("[data-cancel]");
+    // 目次は編集対象外
+    var toc = main.querySelector("#toc");
+    if (toc) toc.setAttribute("contenteditable", "false");
+
+    // フォーカスを本文先頭付近へ
+    try {
+      var firstP = main.querySelector(".section p, .section .section-title");
+      if (firstP) {
+        var range = document.createRange();
+        range.selectNodeContents(firstP);
+        range.collapse(true);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    } catch (e) {}
+
+    window.scrollTo(0, Math.max(0, toolbar.getBoundingClientRect().top + window.pageYOffset - 8));
+
+    var saveBtn = toolbar.querySelector("[data-save]");
+    var cancelBtn = toolbar.querySelector("[data-cancel]");
+
+    function teardown() {
+      main.removeAttribute("contenteditable");
+      main.classList.remove("is-editing");
+      if (toolbar.parentNode) toolbar.parentNode.removeChild(toolbar);
+    }
 
     cancelBtn.addEventListener("click", function () {
+      teardown();
       refresh();
     });
 
@@ -1039,11 +1060,19 @@ main p.no-indent { text-indent: 0; }
       saveBtn.disabled = true;
       cancelBtn.disabled = true;
       try {
-        var html = plainToContent(ta.value);
+        // contenteditable 解除前に HTML を取得
+        if (toc) toc.removeAttribute("contenteditable");
+        main.removeAttribute("contenteditable");
+        main.classList.remove("is-editing");
+        var html = main.innerHTML;
         await saveWork(work.id, { content: html });
+        if (toolbar.parentNode) toolbar.parentNode.removeChild(toolbar);
         await refresh();
       } catch (e) {
         alert("保存に失敗しました: " + (e && e.message ? e.message : e));
+        main.setAttribute("contenteditable", "true");
+        main.classList.add("is-editing");
+        if (toc) toc.setAttribute("contenteditable", "false");
         saveBtn.textContent = "保存";
         saveBtn.disabled = false;
         cancelBtn.disabled = false;
