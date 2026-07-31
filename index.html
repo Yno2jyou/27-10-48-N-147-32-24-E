@@ -286,6 +286,8 @@ main p.no-indent { text-indent: 0; }
   border-radius: 20px; padding: 5px 12px; background: rgba(6,5,8,0.75); cursor: pointer; transition: all 0.2s ease;
 }
 .work-card-admin-btn:hover { background: rgba(154,139,122,0.16); color: var(--fg); }
+.work-card-delete-btn { top: 14px; right: 72px; color: #c45c5c; border-color: rgba(196,92,92,0.45); }
+.work-card-delete-btn:hover { background: rgba(196,92,92,0.14); color: #ef8888; border-color: rgba(196,92,92,0.7); }
 .work-page-admin-bar { text-align: center; margin-bottom: 12px; }
 
 
@@ -370,7 +372,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
   } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
   import {
-    getFirestore, doc, getDoc, setDoc, updateDoc,
+    getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
     collection, getDocs, writeBatch
   } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -685,6 +687,52 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     await updateDoc(doc(db, "site_works", id), partial);
   }
 
+  function slugifyId(title) {
+    var base = String(title || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^\w぀-ヿ㐀-鿿]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40);
+    if (!base) base = "work";
+    var id = base;
+    var n = 2;
+    var existing = {};
+    (cache && cache.works || []).forEach(function (w) { existing[w.id] = true; });
+    while (existing[id]) {
+      id = base + "-" + n;
+      n += 1;
+    }
+    return id;
+  }
+
+  function nextWorkNumber() {
+    var roman = ["I","II","III","IV","V","VI","VII","VIII","IX","X",
+      "XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX"];
+    var n = (cache && cache.works ? cache.works.length : 0);
+    return roman[n] || String(n + 1);
+  }
+
+  async function createWork(fields) {
+    var id = slugifyId(fields.title);
+    var order = (cache && cache.works) ? cache.works.length : 0;
+    var initialBody = (fields.firstChapterTitle || "プロローグ").trim();
+    var content = plainToContent("# " + initialBody + "\n\n（ここに本文を書いてください）");
+    await setDoc(doc(db, "site_works", id), {
+      number: (fields.number || nextWorkNumber()).trim(),
+      title: (fields.title || "").trim(),
+      subtitle: (fields.subtitle || "").trim(),
+      desc: plainToBr(fields.desc || ""),
+      content: content,
+      order: order
+    });
+    return id;
+  }
+
+  async function deleteWork(id) {
+    await deleteDoc(doc(db, "site_works", id));
+  }
+
   function applyTheme(theme) {
     var root = document.documentElement.style;
     root.setProperty("--bg", theme.bg);
@@ -797,7 +845,11 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     html += '</header>';
     html += '<main>';
     if (isAdmin()) {
-      html += adminBar('<button class="btn" data-action="edit-site">サイト情報を編集</button><button class="btn" data-action="edit-theme">配色を編集</button>');
+      html += adminBar(
+        '<button class="btn" data-action="edit-site">サイト情報を編集</button>' +
+        '<button class="btn" data-action="edit-theme">配色を編集</button>' +
+        '<button class="btn primary" data-action="add-work">作品を追加</button>'
+      );
     }
     html += '<div class="intro" id="epigraph-area">' + formatShort(data.site.epigraph) + '</div>';
     html += '<div class="works">';
@@ -805,6 +857,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       html += '<div class="work-card" data-route="#/work/' + encodeURIComponent(w.id) + '">';
       if (isAdmin()) {
         html += '<button class="work-card-admin-btn" data-action="edit-work" data-id="' + esc(w.id) + '">編集</button>';
+        html += '<button class="work-card-admin-btn work-card-delete-btn" data-action="delete-work" data-id="' + esc(w.id) + '" data-title="' + esc(w.title) + '">削除</button>';
       }
       html += '<div class="work-number">' + esc(w.number) + '</div>';
       html += '<h2 class="work-title">' + esc(w.title) + '</h2>';
@@ -1035,6 +1088,36 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         ], function (result) {
           result.desc = plainToBr(result.desc);
           return saveWork(id, result);
+        });
+      });
+    });
+
+    var addWorkBtn = app.querySelector('[data-action="add-work"]');
+    if (addWorkBtn) addWorkBtn.addEventListener("click", function () {
+      openFormModal("新しい作品を追加", [
+        { key: "number", label: "番号（例: IV）", type: "text", value: nextWorkNumber() },
+        { key: "title", label: "タイトル", type: "text", value: "" },
+        { key: "subtitle", label: "サブタイトル", type: "text", value: "" },
+        { key: "desc", label: "紹介文（ふつうの文章・改行OK）", type: "textarea", rows: 5, value: "" },
+        { key: "firstChapterTitle", label: "最初の章タイトル", type: "text", value: "プロローグ" }
+      ], async function (result) {
+        if (!(result.title || "").trim()) {
+          alert("タイトルを入力してください");
+          throw new Error("title required");
+        }
+        var id = await createWork(result);
+        location.hash = "#/work/" + encodeURIComponent(id);
+      });
+    });
+
+    app.querySelectorAll('[data-action="delete-work"]').forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var id = btn.getAttribute("data-id");
+        var title = btn.getAttribute("data-title") || id;
+        if (!window.confirm("作品「" + title + "」を削除しますか？\nこの操作は取り消せません。")) return;
+        deleteWork(id).then(function () { return refresh(); }).catch(function (err) {
+          alert("削除に失敗しました: " + (err && err.message ? err.message : err));
         });
       });
     });
@@ -1281,6 +1364,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       '<select id="chapter-jump" class="chapter-jump"></select>' +
       '</div>' +
       '<div class="actions">' +
+      '<button type="button" class="btn" data-add-chapter>章を追加</button>' +
+      '<button type="button" class="btn" data-del-chapter>章を削除</button>' +
       '<button type="button" class="btn" data-cancel>キャンセル</button>' +
       '<button type="button" class="btn primary" data-save>保存</button>' +
       '</div>';
@@ -1326,6 +1411,89 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     jump.addEventListener("change", function () {
       if (jump.value === "") return;
       jumpToChapter(jump.value, true);
+    });
+
+    function appendChapter(title) {
+      title = (title || "").trim() || "新しい章";
+      var h2 = document.createElement("h2");
+      h2.className = "section-title";
+      h2.textContent = title;
+      var p = document.createElement("p");
+      p.textContent = "（ここに本文を書いてください）";
+      main.appendChild(h2);
+      main.appendChild(p);
+      refreshChapterJump();
+      var idx = main.querySelectorAll("h2.section-title").length - 1;
+      jump.value = String(idx);
+      setTimeout(function () { jumpToChapter(String(idx), true); }, 30);
+    }
+
+    function removeChapterByIndex(idx) {
+      var list = Array.prototype.slice.call(main.querySelectorAll("h2.section-title"));
+      var h = list[idx];
+      if (!h) return;
+      var el = h;
+      while (el) {
+        var next = el.nextElementSibling;
+        var tag = el.tagName;
+        el.parentNode.removeChild(el);
+        if (next && next.tagName === "H2") break;
+        el = next;
+      }
+      refreshChapterJump();
+    }
+
+    var addChapterBtn = toolbar.querySelector("[data-add-chapter]");
+    if (addChapterBtn) addChapterBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      // ツールバー内に簡易入力を出す（prompt / モーダルは編集状態を壊すため使わない）
+      if (toolbar.querySelector(".chapter-add-row")) return;
+      var row = document.createElement("div");
+      row.className = "chapter-add-row";
+      row.style.cssText = "flex:1 1 100%;display:flex;gap:8px;align-items:center;";
+      row.innerHTML =
+        '<input type="text" placeholder="章タイトル（例: 第十八話：…）" ' +
+        'style="flex:1;background:#0c0a0c;border:1px solid var(--line);color:var(--fg);padding:8px 10px;font-family:var(--font-body);font-size:13px;border-radius:2px;outline:none;" />' +
+        '<button type="button" class="btn primary" data-confirm-add>追加</button>' +
+        '<button type="button" class="btn" data-cancel-add>閉じる</button>';
+      toolbar.appendChild(row);
+      var input = row.querySelector("input");
+      input.focus();
+      function doAdd() {
+        appendChapter(input.value);
+        if (row.parentNode) row.parentNode.removeChild(row);
+      }
+      row.querySelector("[data-confirm-add]").addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        doAdd();
+      });
+      row.querySelector("[data-cancel-add]").addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (row.parentNode) row.parentNode.removeChild(row);
+      });
+      input.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter") { ev.preventDefault(); doAdd(); }
+        if (ev.key === "Escape") { if (row.parentNode) row.parentNode.removeChild(row); }
+      });
+    });
+
+    var delChapterBtn = toolbar.querySelector("[data-del-chapter]");
+    if (delChapterBtn) delChapterBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var idx = jump.value;
+      if (idx === "") {
+        alert("先に「章へ移動」から削除する章を選んでください");
+        return;
+      }
+      var list = Array.prototype.slice.call(main.querySelectorAll("h2.section-title"));
+      var name = list[idx] ? (list[idx].textContent || "").trim() : "";
+      if (!window.confirm("章「" + name + "」を削除しますか？\n（保存するまで反映されません）")) return;
+      removeChapterByIndex(Number(idx));
+      jump.value = "";
     });
 
     main.classList.add("is-editing");
