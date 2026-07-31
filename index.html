@@ -154,7 +154,7 @@ main { max-width: var(--max-width); margin: 0 auto; padding: 56px 24px 100px; }
 .work-number { font-family: var(--font-mono); font-size: 11px; color: var(--fg-dim); letter-spacing: 0.18em; margin-bottom: 14px; }
 .work-title { font-size: 20px; font-weight: normal; letter-spacing: 0.14em; margin: 0 0 6px; color: var(--fg); }
 .work-subtitle { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); letter-spacing: 0.1em; margin: 0 0 18px; }
-.work-desc { font-size: 13.5px; color: var(--fg-dim); line-height: 1.95; letter-spacing: 0.03em; margin: 0 0 22px; }
+.work-desc { font-size: 13.5px; color: var(--fg-dim); line-height: 1.95; letter-spacing: 0.03em; margin: 0 0 22px; text-indent: 0; }
 .work-link { font-family: var(--font-mono); font-size: 11px; color: var(--accent); letter-spacing: 0.16em; border-bottom: 1px dotted var(--accent-soft); padding-bottom: 1px; display: inline-block; }
 .work-card:hover .work-link { color: var(--fg); border-bottom-color: var(--fg-dim); }
 
@@ -258,7 +258,7 @@ main p.no-indent { text-indent: 0; }
 
 .admin-bar {
   max-width: var(--max-width); margin: 24px auto; padding: 12px 20px; display: flex; align-items: center;
-  justify-content: space-between; gap: 12px; background: rgba(154,139,122,0.06);
+  justify-content: center; gap: 12px; background: rgba(154,139,122,0.06);
   border: 1px solid var(--accent-soft); border-radius: 20px; font-family: var(--font-mono); font-size: 10px;
   color: var(--accent); letter-spacing: 0.14em; text-transform: uppercase; flex-wrap: wrap;
 }
@@ -282,18 +282,31 @@ main p.no-indent { text-indent: 0; }
 .inline-editor-toolbar {
   position: sticky; top: 0; z-index: 40;
   max-width: var(--max-width); margin: 0 auto 8px;
-  padding: 12px 24px;
+  padding: 12px 16px;
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
-  background: rgba(14, 12, 14, 0.92);
+  background: rgba(14, 12, 14, 0.94);
   border: 1px solid var(--accent-soft); border-radius: 20px;
   backdrop-filter: blur(12px);
   font-family: var(--font-mono); font-size: 11px; color: var(--accent);
   letter-spacing: 0.1em;
 }
 .inline-editor-toolbar .hint {
-  flex: 1 1 auto; color: var(--fg-dim); line-height: 1.6; letter-spacing: 0.06em;
+  flex: 1 1 100%; color: var(--fg-dim); line-height: 1.6; letter-spacing: 0.06em;
 }
-.inline-editor-toolbar .actions { display: flex; gap: 10px; margin-left: auto; }
+.inline-editor-toolbar .jump-wrap {
+  display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0;
+}
+.inline-editor-toolbar .jump-wrap label {
+  flex-shrink: 0; color: var(--fg-dim); letter-spacing: 0.14em; text-transform: uppercase; font-size: 9px;
+}
+.inline-editor-toolbar select.chapter-jump {
+  flex: 1 1 auto; min-width: 0; max-width: 100%;
+  background: #0c0a0c; border: 1px solid var(--line); color: var(--fg);
+  padding: 8px 10px; border-radius: 2px; font-family: var(--font-body); font-size: 13px;
+  letter-spacing: 0.04em; outline: none; cursor: pointer;
+}
+.inline-editor-toolbar select.chapter-jump:focus { border-color: var(--accent); }
+.inline-editor-toolbar .actions { display: flex; gap: 10px; margin-left: auto; flex-shrink: 0; }
 main#honbun.is-editing {
   outline: 1px dashed rgba(154,139,122,0.35);
   outline-offset: 10px;
@@ -302,18 +315,25 @@ main#honbun.is-editing {
 }
 main#honbun.is-editing:focus { outline-color: rgba(154,139,122,0.55); }
 main#honbun.is-editing a { pointer-events: none; cursor: text; }
-/* フラット編集時も通常表示と同じタイポグラフィ */
 main#honbun.is-editing > h2.section-title {
   font-size: 15px; font-weight: normal; color: var(--fg-dim); text-align: center;
   letter-spacing: 0.2em; margin: 72px 0 40px; padding-bottom: 16px; border-bottom: 1px solid var(--line);
+  scroll-margin-top: 88px;
 }
 main#honbun.is-editing > h2.section-title:first-child { margin-top: 0; }
+main#honbun.is-editing > h2.section-title.is-jump-target {
+  background: rgba(154,139,122,0.12);
+  box-shadow: 0 0 0 8px rgba(154,139,122,0.12);
+  border-radius: 2px;
+  transition: background 0.4s ease, box-shadow 0.4s ease;
+}
 main#honbun.is-editing > p {
   margin: 0 0 1.4em; text-indent: 1em;
 }
 main#honbun.is-editing > p.no-indent { text-indent: 0; }
 @media (max-width: 520px) {
-  .inline-editor-toolbar { margin: 0 12px 8px; padding: 10px 14px; border-radius: 14px; }
+  .inline-editor-toolbar { margin: 0 12px 8px; padding: 10px 12px; border-radius: 14px; }
+  .inline-editor-toolbar .actions { width: 100%; justify-content: flex-end; margin-left: 0; }
 }
 
 </style>
@@ -744,7 +764,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
   function adminBar(extraHtml) {
     if (!isAdmin()) return "";
-    return '<div class="admin-bar"><span>管理モード（' + esc(currentUser && currentUser.email || "") + '）：編集可能です</span>' + (extraHtml || "") + '</div>';
+    return '<div class="admin-bar">' + (extraHtml || "") + '</div>';
   }
 
   function renderHome(data) {
@@ -794,7 +814,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     html += '</header>';
     html += '<nav class="work-nav"><a href="#/" data-home>トップページへ</a> <a href="#toc">目次</a></nav>';
     if (isAdmin()) {
-      html += '<div class="work-page-admin-bar">' + adminBar('<button class="btn" data-action="edit-work-meta" data-id="' + esc(work.id) + '">タイトル/紹介文を編集</button><button class="btn" data-action="edit-work-body" data-id="' + esc(work.id) + '">本文を編集</button>') + '</div>';
+      html += '<div class="work-page-admin-bar">' + adminBar('<button class="btn" data-action="edit-work-body" data-id="' + esc(work.id) + '">本文を編集</button>') + '</div>';
     }
     html += '<main id="honbun">' + formatContent(work.content) + '</main>';
     html += '<nav class="work-nav"><a href="#/" data-home>トップページへ</a></nav>';
@@ -996,21 +1016,29 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   }
 
   function attachWorkAdminHandlers(data, work) {
-    var metaBtn = app.querySelector('[data-action="edit-work-meta"]');
-    if (metaBtn) metaBtn.addEventListener("click", function () {
-      openFormModal("「" + work.title + "」のタイトル/紹介文を編集", [
-        { key: "title", label: "タイトル", type: "text", value: work.title },
-        { key: "subtitle", label: "サブタイトル", type: "text", value: work.subtitle },
-        { key: "desc", label: "トップページの紹介文（ふつうの文章・改行OK）", type: "textarea", rows: 6, value: brToPlain(work.desc) }
-      ], function (result) {
-        result.desc = plainToBr(result.desc);
-        return saveWork(work.id, result);
-      });
-    });
-
     var bodyBtn = app.querySelector('[data-action="edit-work-body"]');
     if (bodyBtn) bodyBtn.addEventListener("click", function () {
       enterInlineBodyEdit(work);
+    });
+
+    // 各章見出しの横から、その章へジャンプして編集開始
+    app.querySelectorAll("#honbun .section").forEach(function (sec) {
+      var titleEl = sec.querySelector(".section-title");
+      if (!titleEl) return;
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn section-edit-btn";
+      btn.textContent = "この章を編集";
+      btn.style.cssText = "display:block;margin:0 auto 24px;font-size:10px;padding:6px 14px;";
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var t = (titleEl.textContent || "").trim();
+        enterInlineBodyEdit(work, { focusTitle: t });
+      });
+      // 見出しの直後に挿入
+      if (titleEl.nextSibling) sec.insertBefore(btn, titleEl.nextSibling);
+      else sec.appendChild(btn);
     });
   }
 
@@ -1207,11 +1235,11 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     return html;
   }
 
-  function enterInlineBodyEdit(work) {
+  function enterInlineBodyEdit(work, opts) {
+    opts = opts || {};
     var main = app.querySelector("#honbun");
     if (!main || main.classList.contains("is-editing")) return;
 
-    // 複雑なネストを捨てて、見出し+段落のフラット構造にする
     flattenWorkDom(main);
 
     app.querySelectorAll("nav.work-nav").forEach(function (n) { n.style.display = "none"; });
@@ -1222,12 +1250,58 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     toolbar.className = "inline-editor-toolbar";
     toolbar.id = "inline-editor-toolbar";
     toolbar.innerHTML =
-      '<div class="hint">本文を直接編集中（ページ全体を選択・コピペできます）</div>' +
+      '<div class="hint">本文を直接編集中（章を選ぶとそこにジャンプします）</div>' +
+      '<div class="jump-wrap">' +
+      '<label for="chapter-jump">章へ移動</label>' +
+      '<select id="chapter-jump" class="chapter-jump"></select>' +
+      '</div>' +
       '<div class="actions">' +
       '<button type="button" class="btn" data-cancel>キャンセル</button>' +
       '<button type="button" class="btn primary" data-save>保存</button>' +
       '</div>';
     main.parentNode.insertBefore(toolbar, main);
+
+    // 章ジャンプ用 select を構築
+    var jump = toolbar.querySelector("#chapter-jump");
+    var headings = Array.prototype.slice.call(main.querySelectorAll("h2.section-title"));
+    jump.innerHTML = '<option value="">— 章を選択 —</option>';
+    headings.forEach(function (h, i) {
+      h.setAttribute("data-chapter-idx", String(i));
+      var opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = (h.textContent || "").trim() || ("章 " + (i + 1));
+      jump.appendChild(opt);
+    });
+
+    function jumpToChapter(idx, highlight) {
+      var h = main.querySelector('h2.section-title[data-chapter-idx="' + idx + '"]');
+      if (!h) return;
+      h.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (highlight) {
+        main.querySelectorAll("h2.section-title.is-jump-target").forEach(function (el) {
+          el.classList.remove("is-jump-target");
+        });
+        h.classList.add("is-jump-target");
+        setTimeout(function () { h.classList.remove("is-jump-target"); }, 1600);
+      }
+      try {
+        h.focus();
+        var range = document.createRange();
+        // 見出しの次の段落先頭へキャレット
+        var next = h.nextElementSibling;
+        var target = (next && next.tagName === "P") ? next : h;
+        range.selectNodeContents(target);
+        range.collapse(true);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } catch (err) {}
+    }
+
+    jump.addEventListener("change", function () {
+      if (jump.value === "") return;
+      jumpToChapter(jump.value, true);
+    });
 
     main.classList.add("is-editing");
     main.setAttribute("contenteditable", "true");
@@ -1256,6 +1330,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
           range.insertNode(frag);
         }
       }
+      // 貼付け後に章リストを更新
+      refreshChapterJump();
     }
     main.addEventListener("paste", onPaste);
 
@@ -1265,23 +1341,59 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       if (!text) return;
       var html = plainChunksToParagraphHtml(text);
       if (html) document.execCommand("insertHTML", false, html);
+      refreshChapterJump();
     }
     main.addEventListener("drop", onDrop);
 
-    try {
-      main.focus();
-      var first = main.querySelector("p, h2");
-      if (first) {
-        var range = document.createRange();
-        range.selectNodeContents(first);
-        range.collapse(true);
-        var sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-      }
-    } catch (err) {}
+    function refreshChapterJump() {
+      var cur = jump.value;
+      headings = Array.prototype.slice.call(main.querySelectorAll("h2.section-title"));
+      jump.innerHTML = '<option value="">— 章を選択 —</option>';
+      headings.forEach(function (h, i) {
+        h.setAttribute("data-chapter-idx", String(i));
+        var opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = (h.textContent || "").trim() || ("章 " + (i + 1));
+        jump.appendChild(opt);
+      });
+      if (cur !== "" && Number(cur) < headings.length) jump.value = cur;
+    }
 
-    window.scrollTo(0, Math.max(0, toolbar.getBoundingClientRect().top + window.pageYOffset - 8));
+    // 初期表示: 指定章 or ハッシュ or 先頭
+    var focusTitle = opts.focusTitle || "";
+    var focusIdx = -1;
+    if (focusTitle) {
+      for (var i = 0; i < headings.length; i++) {
+        if ((headings[i].textContent || "").trim().indexOf(focusTitle) >= 0) {
+          focusIdx = i;
+          break;
+        }
+      }
+    }
+    if (focusIdx < 0 && location.hash && location.hash.indexOf("#ch") === 0) {
+      // 閲覧時の #ch16 など → だいたいの順番でジャンプ
+      var num = parseInt(location.hash.replace(/\D/g, ""), 10);
+      if (!isNaN(num) && num >= 0 && num < headings.length) focusIdx = num;
+    }
+
+    if (focusIdx >= 0) {
+      jump.value = String(focusIdx);
+      setTimeout(function () { jumpToChapter(String(focusIdx), true); }, 50);
+    } else {
+      try {
+        main.focus();
+        var first = main.querySelector("p, h2");
+        if (first) {
+          var range = document.createRange();
+          range.selectNodeContents(first);
+          range.collapse(true);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      } catch (err) {}
+      window.scrollTo(0, Math.max(0, toolbar.getBoundingClientRect().top + window.pageYOffset - 8));
+    }
 
     var saveBtn = toolbar.querySelector("[data-save]");
     var cancelBtn = toolbar.querySelector("[data-cancel]");
