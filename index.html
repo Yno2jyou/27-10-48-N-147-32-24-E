@@ -290,6 +290,25 @@ main p.no-indent { text-indent: 0; }
 .work-card-delete-btn:hover { background: rgba(196,92,92,0.14); color: #ef8888; border-color: rgba(196,92,92,0.7); }
 .work-page-admin-bar { text-align: center; margin-bottom: 12px; }
 
+/* 作品ページ：常に見えるトップへ */
+.floating-home {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  z-index: 450;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em;
+  color: var(--accent); text-decoration: none;
+  padding: 10px 22px; border-radius: 20px;
+  background: rgba(14, 12, 14, 0.88); border: 1px solid var(--accent-soft);
+  backdrop-filter: blur(12px);
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  white-space: nowrap;
+}
+.floating-home:hover {
+  color: var(--fg); border-color: var(--accent); background: rgba(18, 16, 18, 0.95);
+}
+@media (max-width: 520px) {
+  .floating-home { bottom: 16px; font-size: 10px; padding: 9px 18px; }
+}
+
 
 /* ---------- Inline body editor (WYSIWYG) ---------- */
 .inline-editor-toolbar {
@@ -899,6 +918,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     html += '<main id="honbun">' + formatContent(work.content) + '</main>';
     html += '<nav class="work-nav"><a href="#/" data-home>トップページへ</a></nav>';
     html += '<footer><p>&copy; 2026 ' + esc(work.title) + '</p></footer>';
+    html += '<a class="floating-home" href="#/" data-home>トップページへ</a>';
     app.innerHTML = html;
 
     attachWorkInteractions();
