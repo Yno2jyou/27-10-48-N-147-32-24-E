@@ -348,8 +348,29 @@ body.keyboard-open .site-menu-btn { display: none !important; }
   height: 1px; background: var(--line); margin: 10px 18px;
 }
 .site-sidebar-nav .sidebar-label {
-  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em;
-  color: var(--fg-dim); padding: 8px 22px 4px; text-transform: uppercase;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em;
+  color: var(--fg-dim); padding: 16px 22px 6px; text-transform: uppercase;
+}
+.site-sidebar-nav .sidebar-label:first-child {
+  padding-top: 6px;
+}
+.site-sidebar-nav button.is-work {
+  font-family: var(--font-body); font-size: 14px; letter-spacing: 0.06em;
+  padding: 11px 22px 11px 28px;
+  color: var(--fg);
+}
+.site-sidebar-nav button.is-work .work-num {
+  display: block;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em;
+  color: var(--fg-dim); margin-bottom: 2px;
+}
+.site-sidebar-nav button.is-work.is-current {
+  color: var(--accent);
+  background: rgba(154,139,122,0.08);
+}
+.site-sidebar-nav .sidebar-empty {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em;
+  color: var(--fg-dim); padding: 8px 22px 12px 28px;
 }
 
 .rain-layer {
@@ -1981,45 +2002,61 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
   function rebuildSidebarNav() {
     if (!siteSidebarNav) return;
-    var items = [];
     var hash = location.hash || "#/";
     var onHome = (hash === "#/" || hash === "" || hash.indexOf("#/work/") !== 0);
-
-    items.push({ label: "ページトップへ", action: "page-top" });
-    if (!onHome) {
-      items.push({ label: "トップページへ", action: "home" });
-    }
-
-    items.push({ type: "divider" });
-
-    if (!isAdmin()) {
-      items.push({ label: "管理ログイン", action: "login" });
-    } else {
-      if (manageMode) {
-        items.push({ label: "閲覧モード", action: "toggle-manage" });
-      } else {
-        items.push({ label: "編集モード", action: "toggle-manage" });
-      }
-      if (isManaging()) {
-        items.push({ label: "隠し要素", action: "secret-guide" });
-      }
-      items.push({ label: "ログアウト", action: "logout" });
-    }
-
-    if (isFactorUnlocked()) {
-      items.push({ type: "divider" });
-      items.push({ label: "FACTOR/TRADERへ", action: "factor", accent: true });
+    var currentWorkId = "";
+    if (hash.indexOf("#/work/") === 0) {
+      try { currentWorkId = decodeURIComponent(hash.slice(7)); } catch (e) { currentWorkId = hash.slice(7); }
     }
 
     var html = "";
-    items.forEach(function (it) {
-      if (it.type === "divider") {
-        html += '<div class="sidebar-divider"></div>';
-        return;
+
+    // ---- 操作 ----
+    html += '<div class="sidebar-label">操作</div>';
+    html += '<button type="button" data-action="page-top">ページトップへ</button>';
+    if (!onHome) {
+      html += '<button type="button" data-action="home">トップページへ</button>';
+    }
+
+    // ---- 作品 ----
+    html += '<div class="sidebar-label">作品</div>';
+    var works = (cache && cache.works) ? cache.works.filter(function (w) { return isWorkVisible(w); }) : [];
+    if (!works.length) {
+      html += '<div class="sidebar-empty">表示できる作品がありません</div>';
+    } else {
+      works.forEach(function (w) {
+        var isCurrent = w.id === currentWorkId;
+        var cls = "is-work" + (isCurrent ? " is-current" : "");
+        var num = (w.number || "").trim();
+        var title = (w.title || w.id || "").trim();
+        html += '<button type="button" class="' + cls + '" data-action="work" data-work-id="' + esc(w.id) + '">';
+        if (num) html += '<span class="work-num">' + esc(num) + "</span>";
+        html += esc(title) + "</button>";
+      });
+    }
+
+    // ---- ゲーム ----
+    if (isFactorUnlocked()) {
+      html += '<div class="sidebar-label">ゲーム</div>';
+      html += '<button type="button" class="is-accent" data-action="factor">FACTOR/TRADERへ</button>';
+    }
+
+    // ---- 管理 ----
+    html += '<div class="sidebar-label">管理</div>';
+    if (!isAdmin()) {
+      html += '<button type="button" data-action="login">管理ログイン</button>';
+    } else {
+      if (manageMode) {
+        html += '<button type="button" data-action="toggle-manage">閲覧モード</button>';
+      } else {
+        html += '<button type="button" data-action="toggle-manage">編集モード</button>';
       }
-      var cls = it.accent ? ' class="is-accent"' : "";
-      html += '<button type="button" data-action="' + it.action + '"' + cls + ">" + esc(it.label) + "</button>";
-    });
+      if (isManaging()) {
+        html += '<button type="button" data-action="secret-guide">隠し要素</button>';
+      }
+      html += '<button type="button" data-action="logout">ログアウト</button>';
+    }
+
     siteSidebarNav.innerHTML = html;
 
     siteSidebarNav.querySelectorAll("[data-action]").forEach(function (btn) {
@@ -2032,6 +2069,9 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
           window.scrollTo({ top: 0, behavior: "smooth" });
         } else if (act === "home") {
           location.hash = "#/";
+        } else if (act === "work") {
+          var wid = btn.getAttribute("data-work-id");
+          if (wid) location.hash = "#/work/" + encodeURIComponent(wid);
         } else if (act === "login") {
           openLoginModal();
         } else if (act === "toggle-manage") {
