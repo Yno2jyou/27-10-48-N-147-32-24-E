@@ -329,6 +329,23 @@ body.keyboard-open .site-menu-btn { display: none !important; }
   font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em;
   color: var(--fg-dim); text-transform: uppercase;
 }
+.site-sidebar-header .sidebar-menu-label {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  padding: 6px 4px;
+  margin: -6px -4px;
+  border-radius: 2px;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+.site-sidebar-header .sidebar-menu-label:hover {
+  color: var(--fg);
+}
+.site-sidebar-header .sidebar-menu-label.is-egg-pulse {
+  color: var(--accent);
+  background: rgba(154,139,122,0.12);
+}
 .site-sidebar-close {
   background: none; border: 1px solid var(--line); color: var(--fg-dim);
   width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
@@ -771,7 +788,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 <div id="site-sidebar-overlay" class="site-sidebar-overlay" aria-hidden="true">
   <div class="site-sidebar" role="dialog" aria-label="サイトメニュー">
     <div class="site-sidebar-header">
-      <span>メニュー</span>
+      <span class="sidebar-menu-label" id="sidebar-menu-label">メニュー</span>
       <button type="button" class="site-sidebar-close" data-sidebar-close aria-label="閉じる">×</button>
     </div>
     <nav class="site-sidebar-nav" id="site-sidebar-nav"></nav>
@@ -1440,6 +1457,10 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   var _eggCatchLast = 0;
   var _eggCatchPhase = "idle";
   var _eggCatchPhaseTimer = null;
+  var _eggCmdMenuTaps = 0;
+  var _eggCmdMenuLast = 0;
+  var _eggCmdPhase = "idle"; /* idle | after-menu */
+  var _eggCmdPhaseTimer = null;
   var TAP_GAP = 1200;
   var _rainTimer = null;
   var _rainLayer = null;
@@ -1455,6 +1476,18 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       if (now - _eggTitleLast > TAP_GAP) _eggTitleTaps = 0;
       _eggTitleLast = now;
       _eggTitleTaps += 1;
+
+      /* メニュー5回のあと → タイトル5回で隠しコマンド一覧（最優先） */
+      if (_eggCmdPhase === "after-menu") {
+        if (_eggTitleTaps >= 5) {
+          _eggTitleTaps = 0;
+          _eggCmdPhase = "idle";
+          if (_eggCmdPhaseTimer) { clearTimeout(_eggCmdPhaseTimer); _eggCmdPhaseTimer = null; }
+          closeSidebar();
+          openSecretGuideModal();
+        }
+        return;
+      }
 
       if (isSecretUnlocked()) {
         if (_eggTitleTaps >= 3) {
@@ -1837,6 +1870,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       '<div class="secret-guide-section">' +
       "<h4>操作一覧</h4>" +
       "<ol>" +
+      "<li><strong>サイドバーの「メニュー」</strong>を <strong>5回</strong>タップ → 続けて<strong>サイトタイトル</strong>を <strong>5回</strong>タップ → この隠しコマンド一覧を表示</li>" +
       "<li><strong>サブタイトル</strong>を <strong>3回</strong>タップ → 画面の色が反転（もう一度3回で戻る）</li>" +
       "<li><strong>サイトタイトル</strong>を <strong>5回</strong>タップ → 流星群が約30秒間流れる</li>" +
       "<li>タイトル5回 → 流星群のあと → タイトルを <strong>3回</strong>タップ → 隠し作品が一覧に表示される</li>" +
@@ -2119,6 +2153,41 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       }
     });
   }
+
+  /* サイドバー「メニュー」文字を5回タップ → サイトタイトル5回で隠しコマンド一覧 */
+  (function setupMenuLabelEgg() {
+    var label = document.getElementById("sidebar-menu-label");
+    if (!label || label.getAttribute("data-egg-bound") === "1") return;
+    label.setAttribute("data-egg-bound", "1");
+    var lastFire = 0;
+    function onMenuLabelTap(ev) {
+      var t = Date.now();
+      if (t - lastFire < 280) return;
+      lastFire = t;
+      if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+      var now = Date.now();
+      if (now - _eggCmdMenuLast > TAP_GAP) _eggCmdMenuTaps = 0;
+      _eggCmdMenuLast = now;
+      _eggCmdMenuTaps += 1;
+      label.classList.add("is-egg-pulse");
+      setTimeout(function () { label.classList.remove("is-egg-pulse"); }, 180);
+      if (_eggCmdMenuTaps >= 5) {
+        _eggCmdMenuTaps = 0;
+        _eggCmdPhase = "after-menu";
+        if (_eggCmdPhaseTimer) clearTimeout(_eggCmdPhaseTimer);
+        _eggCmdPhaseTimer = setTimeout(function () {
+          _eggCmdPhase = "idle";
+        }, 60000);
+        // サイドバーを閉じてタイトルへ誘導
+        closeSidebar();
+      }
+    }
+    label.addEventListener("pointerup", onMenuLabelTap);
+    label.addEventListener("click", function (ev) {
+      if (window.PointerEvent) return;
+      onMenuLabelTap(ev);
+    });
+  })();
   if (siteSidebarOverlay) {
     siteSidebarOverlay.addEventListener("click", function (e) {
       if (e.target === siteSidebarOverlay) closeSidebar();
