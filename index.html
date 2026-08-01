@@ -265,23 +265,43 @@ main p.no-indent { text-indent: 0; }
   main#honbun.is-editing > p { font-size: 14px; line-height: 1.85; margin: 0 0 1.2em; }
 }
 
-/* ---------- Admin UI (styled after the LUNA3 buchi admin look) ---------- */
-.admin-fab {
-  position: fixed; bottom: 22px; right: 16px; z-index: 500;
-  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
-  background: rgba(154,139,122,0.08); border: 1px solid var(--accent-soft); color: var(--accent);
-  padding: 7px 18px; border-radius: 20px; cursor: pointer; transition: all 0.2s ease;
+/* ---------- サイドメニュー（右上の三点リーダー） ---------- */
+.side-menu-toggle {
+  position: fixed; top: 16px; right: 16px; z-index: 600;
+  width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 18px; letter-spacing: 0.1em; line-height: 1;
+  background: rgba(14, 12, 14, 0.88); border: 1px solid var(--accent-soft); color: var(--accent);
+  border-radius: 50%; cursor: pointer; transition: all 0.2s ease;
   backdrop-filter: blur(10px);
-  max-width: min(280px, calc(100% - 24px));
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-body.is-editing .admin-fab {
-  z-index: 460;
+.side-menu-toggle:hover { background: rgba(18, 16, 18, 0.95); color: var(--fg); border-color: var(--accent); }
+body.keyboard-open .side-menu-toggle { display: none !important; }
+
+.side-menu-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 590;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
 }
-.inline-editor-toolbar.is-keyboard-open { display: none !important; }
-body.keyboard-open .admin-fab { display: none !important; }
-.admin-fab:hover { background: rgba(154,139,122,0.16); color: var(--fg); }
-.admin-fab.is-admin { background: rgba(154,139,122,0.18); border-color: var(--accent); color: var(--accent); }
+.side-menu-overlay.is-open { opacity: 1; pointer-events: auto; }
+
+.side-menu {
+  position: fixed; top: 0; right: 0; height: 100%; width: 240px; max-width: 82vw; z-index: 595;
+  background: rgba(14, 12, 14, 0.96); border-left: 1px solid var(--accent-soft);
+  backdrop-filter: blur(14px);
+  transform: translateX(100%); transition: transform 0.25s ease;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 64px 16px 16px;
+  box-sizing: border-box;
+}
+.side-menu.is-open { transform: translateX(0); }
+.side-menu-item {
+  display: block; width: 100%; text-align: left;
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+  background: rgba(154,139,122,0.08); border: 1px solid var(--accent-soft); color: var(--accent);
+  padding: 12px 16px; border-radius: 10px; cursor: pointer; transition: all 0.2s ease;
+  text-decoration: none;
+}
+.side-menu-item:hover { background: rgba(154,139,122,0.16); color: var(--fg); }
+.side-menu-item.is-admin { background: rgba(154,139,122,0.18); border-color: var(--accent); color: var(--accent); }
 
 .factor-trader-fab {
   position: fixed; bottom: 62px; right: 16px; z-index: 500;
@@ -551,47 +571,6 @@ header .site-subtitle {
   opacity: 0.7;
 }
 
-/* 作品ページ：常に見えるトップへ */
-.floating-home {
-  position: fixed; bottom: 22px; left: 0; right: 0;
-  width: max-content; max-width: calc(100% - 24px); margin: 0 auto;
-  z-index: 450;
-  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em;
-  color: var(--accent); text-decoration: none;
-  padding: 10px 22px; border-radius: 20px;
-  background: rgba(14, 12, 14, 0.88); border: 1px solid var(--accent-soft);
-  backdrop-filter: blur(12px);
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-  white-space: nowrap;
-}
-.floating-home:hover {
-  color: var(--fg); border-color: var(--accent); background: rgba(18, 16, 18, 0.95);
-}
-@media (max-width: 520px) {
-  .floating-home { bottom: 16px; font-size: 10px; padding: 9px 18px; }
-}
-
-/* 「ページトップへ」ボタン（閲覧モードボタンと同じ見た目・大きさ、左下に配置） */
-.floating-pagetop {
-  position: fixed; bottom: 22px; left: 16px; z-index: 500;
-  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
-  background: rgba(154,139,122,0.08); border: 1px solid var(--accent-soft); color: var(--accent);
-  padding: 7px 18px; border-radius: 20px; cursor: pointer; transition: all 0.2s ease;
-  backdrop-filter: blur(10px);
-  max-width: min(280px, calc(100% - 24px));
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.floating-pagetop:hover {
-  background: rgba(154,139,122,0.16); color: var(--fg);
-}
-body.is-editing .floating-pagetop {
-  z-index: 460;
-}
-body.keyboard-open .floating-pagetop { display: none !important; }
-@media (max-width: 520px) {
-  .floating-pagetop { bottom: 18px; left: 12px; padding: 7px 14px; font-size: 9px; }
-}
-
 
 /* ---------- Inline body editor (WYSIWYG) ---------- */
 .inline-editor-toolbar {
@@ -605,6 +584,7 @@ body.keyboard-open .floating-pagetop { display: none !important; }
   font-family: var(--font-mono); font-size: 11px; color: var(--accent);
   letter-spacing: 0.1em;
 }
+.inline-editor-toolbar.is-keyboard-open { display: none !important; }
 .inline-editor-toolbar .edit-nav {
   flex: 1 1 100%; text-align: center; margin-bottom: 2px;
   font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em;
@@ -705,9 +685,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     width: 100%; margin: 0; padding: 10px 6px; font-size: 11px;
     text-align: center; box-sizing: border-box;
   }
-  .admin-fab {
-    bottom: 18px; right: 12px; padding: 8px 14px; font-size: 9px;
-  }
+  .side-menu-toggle { top: 12px; right: 12px; width: 34px; height: 34px; font-size: 16px; }
 }
 
 </style>
