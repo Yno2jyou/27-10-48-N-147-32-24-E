@@ -571,24 +571,25 @@ header .site-subtitle {
   .floating-home { bottom: 16px; font-size: 10px; padding: 9px 18px; }
 }
 
-/* 作品編集画面：左下の「ページトップへ」ボタン */
+/* 「ページトップへ」ボタン（閲覧モードボタンと同じ見た目・大きさ、左下に配置） */
 .floating-pagetop {
-  position: fixed; bottom: 22px; left: 16px;
-  z-index: 500;
-  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em;
-  color: var(--accent); text-decoration: none; background: none;
-  padding: 10px 18px; border-radius: 20px; cursor: pointer;
-  background: rgba(14, 12, 14, 0.88); border: 1px solid var(--accent-soft);
-  backdrop-filter: blur(12px);
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-  white-space: nowrap;
+  position: fixed; bottom: 22px; left: 16px; z-index: 500;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+  background: rgba(154,139,122,0.08); border: 1px solid var(--accent-soft); color: var(--accent);
+  padding: 7px 18px; border-radius: 20px; cursor: pointer; transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+  max-width: min(280px, calc(100% - 24px));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .floating-pagetop:hover {
-  color: var(--fg); border-color: var(--accent); background: rgba(18, 16, 18, 0.95);
+  background: rgba(154,139,122,0.16); color: var(--fg);
+}
+body.is-editing .floating-pagetop {
+  z-index: 460;
 }
 body.keyboard-open .floating-pagetop { display: none !important; }
 @media (max-width: 520px) {
-  .floating-pagetop { bottom: 16px; left: 12px; font-size: 10px; padding: 9px 16px; }
+  .floating-pagetop { bottom: 18px; left: 12px; padding: 7px 14px; font-size: 9px; }
 }
 
 
@@ -1841,7 +1842,13 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       '</nav>';
     html += '<footer><p>&copy; 2026 ' + esc(work.title) + '</p></footer>';
     html += '<a class="floating-home" href="#/" data-home>トップページへ</a>';
+    html += '<button type="button" class="floating-pagetop" data-page-top>ページトップへ</button>';
     app.innerHTML = html;
+
+    var viewPageTopBtn = app.querySelector("[data-page-top]");
+    if (viewPageTopBtn) viewPageTopBtn.addEventListener("click", function () {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
 
     attachWorkInteractions();
     app.querySelectorAll("[data-secret-guide]").forEach(function (el) {
@@ -2371,15 +2378,17 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       '</div>';
     main.parentNode.insertBefore(toolbar, main);
 
-    var pageTopBtn = document.createElement("button");
-    pageTopBtn.type = "button";
-    pageTopBtn.className = "floating-pagetop";
-    pageTopBtn.id = "inline-editor-pagetop";
-    pageTopBtn.textContent = "ページトップへ";
-    pageTopBtn.addEventListener("click", function () {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    });
-    document.body.appendChild(pageTopBtn);
+    var pageTopBtn = app.querySelector(".floating-pagetop");
+    if (!pageTopBtn) {
+      pageTopBtn = document.createElement("button");
+      pageTopBtn.type = "button";
+      pageTopBtn.className = "floating-pagetop";
+      pageTopBtn.textContent = "ページトップへ";
+      pageTopBtn.addEventListener("click", function () {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+      document.body.appendChild(pageTopBtn);
+    }
 
     // 章ジャンプ用 select を構築
     var jump = toolbar.querySelector("#chapter-jump");
