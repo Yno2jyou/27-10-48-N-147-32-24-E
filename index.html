@@ -278,9 +278,6 @@ main p.no-indent { text-indent: 0; }
 body.is-editing .admin-fab {
   z-index: 460;
 }
-body.is-editing .floating-home {
-  display: none;
-}
 .inline-editor-toolbar.is-keyboard-open { display: none !important; }
 body.keyboard-open .admin-fab { display: none !important; }
 .admin-fab:hover { background: rgba(154,139,122,0.16); color: var(--fg); }
@@ -574,6 +571,26 @@ header .site-subtitle {
   .floating-home { bottom: 16px; font-size: 10px; padding: 9px 18px; }
 }
 
+/* 作品編集画面：左下の「ページトップへ」ボタン */
+.floating-pagetop {
+  position: fixed; bottom: 22px; left: 16px;
+  z-index: 500;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em;
+  color: var(--accent); text-decoration: none; background: none;
+  padding: 10px 18px; border-radius: 20px; cursor: pointer;
+  background: rgba(14, 12, 14, 0.88); border: 1px solid var(--accent-soft);
+  backdrop-filter: blur(12px);
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  white-space: nowrap;
+}
+.floating-pagetop:hover {
+  color: var(--fg); border-color: var(--accent); background: rgba(18, 16, 18, 0.95);
+}
+body.keyboard-open .floating-pagetop { display: none !important; }
+@media (max-width: 520px) {
+  .floating-pagetop { bottom: 16px; left: 12px; font-size: 10px; padding: 9px 16px; }
+}
+
 
 /* ---------- Inline body editor (WYSIWYG) ---------- */
 .inline-editor-toolbar {
@@ -690,7 +707,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   .admin-fab {
     bottom: 18px; right: 12px; padding: 8px 14px; font-size: 9px;
   }
-  body.is-editing .floating-home { display: none; }
 }
 
 </style>
@@ -2355,6 +2371,16 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       '</div>';
     main.parentNode.insertBefore(toolbar, main);
 
+    var pageTopBtn = document.createElement("button");
+    pageTopBtn.type = "button";
+    pageTopBtn.className = "floating-pagetop";
+    pageTopBtn.id = "inline-editor-pagetop";
+    pageTopBtn.textContent = "ページトップへ";
+    pageTopBtn.addEventListener("click", function () {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    document.body.appendChild(pageTopBtn);
+
     // 章ジャンプ用 select を構築
     var jump = toolbar.querySelector("#chapter-jump");
     var headings = Array.prototype.slice.call(main.querySelectorAll("h2.section-title"));
@@ -2665,6 +2691,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       window.removeEventListener("resize", onKbViewportChange);
       if (_kbTimer) clearTimeout(_kbTimer);
       toolbar.classList.remove("is-keyboard-open");
+      if (pageTopBtn.parentNode) pageTopBtn.parentNode.removeChild(pageTopBtn);
     }
 
     saveBtn.addEventListener("click", async function () {
@@ -2680,6 +2707,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         alert("保存に失敗しました: " + (err && err.message ? err.message : err));
         main.classList.add("is-editing");
         document.body.classList.add("is-editing");
+        if (!pageTopBtn.parentNode) document.body.appendChild(pageTopBtn);
         main.setAttribute("contenteditable", "true");
         main.setAttribute("spellcheck", "false");
         main.addEventListener("paste", onPaste);
