@@ -2166,15 +2166,11 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     blocks.forEach(function (b) {
       if (!b || !b.text) return;
       if (b.kind === "h2") {
-        if (lines.length) lines.push("");
         lines.push(b.text);
-        lines.push("");
       } else {
         lines.push((b.indent ? "　" : "") + b.text);
-        lines.push("");
       }
     });
-    while (lines.length && lines[lines.length - 1] === "") lines.pop();
     return lines.join("\n");
   }
 
@@ -2250,8 +2246,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         // 簡易 HTML（段落・空行を保つ）
         var html = plain
           .split("\n")
+          .filter(function (line) { return line !== ""; })
           .map(function (line) {
-            if (line === "") return "<p><br></p>";
             return "<p>" + line
               .replace(/&/g, "&amp;")
               .replace(/</g, "&lt;")
