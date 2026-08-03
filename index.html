@@ -3430,23 +3430,57 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
         title.setAttribute("contenteditable", "true");
         title.setAttribute("spellcheck", "false");
         title.addEventListener("paste", onTitlePaste);
-        // Enter で本文へ移動
-        title.addEventListener("keydown", function (ev) {
-          if (ev.key === "Enter") {
+
+        function isImeComposing(ev) {
+          // 日本語IME変換中の Enter（確定）を本文移動と誤判定しない
+          return !!(ev && (ev.isComposing || ev.keyCode === 229));
+        }
+
+        function moveFocusToBody() {
+          var block = title.closest(".chapter-edit-block");
+          var body = block && block.querySelector(".chapter-edit-body");
+          if (!body) return;
+          // タイトル内の改行・余分なノードを掃除して1行に保つ
+          var plain = (title.textContent || "").replace(/\s+/g, " ").trim();
+          title.textContent = plain;
+          body.focus();
+          try {
+            var p = body.querySelector("p");
+            if (!p) {
+              p = document.createElement("p");
+              p.innerHTML = "<br>";
+              body.appendChild(p);
+            }
+            var r = document.createRange();
+            r.selectNodeContents(p);
+            r.collapse(true);
+            var s = window.getSelection();
+            s.removeAllRanges();
+            s.addRange(r);
+          } catch (err) {}
+        }
+
+        // 改行の挿入自体をブロック（IME確定の Enter は通す）
+        title.addEventListener("beforeinput", function (ev) {
+          if (isImeComposing(ev)) return;
+          if (ev.inputType === "insertParagraph" || ev.inputType === "insertLineBreak") {
             ev.preventDefault();
-            var block = title.closest(".chapter-edit-block");
-            var body = block && block.querySelector(".chapter-edit-body");
-            if (body) {
-              body.focus();
-              try {
-                var r = document.createRange();
-                var p = body.querySelector("p") || body;
-                r.selectNodeContents(p);
-                r.collapse(true);
-                var s = window.getSelection();
-                s.removeAllRanges();
-                s.addRange(r);
-              } catch (err) {}
+            moveFocusToBody();
+          }
+        });
+        title.addEventListener("keydown", function (ev) {
+          if (ev.key !== "Enter") return;
+          if (isImeComposing(ev)) return; // 変換確定の Enter は無視
+          ev.preventDefault();
+          ev.stopPropagation();
+          moveFocusToBody();
+        });
+        // 万一改行が入ったら除去
+        title.addEventListener("input", function () {
+          if (title.querySelector("br, div, p")) {
+            var plain = (title.textContent || "").replace(/\s+/g, " ").trim();
+            if (title.textContent !== plain) {
+              title.textContent = plain;
             }
           }
         });
