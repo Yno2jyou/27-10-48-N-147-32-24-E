@@ -532,6 +532,40 @@ header .site-catchcopy.is-egg-pulse {
 .btn.primary:hover { opacity: 0.88; color: #060508; }
 .modal-error { color: #ef4444; font-size: 12px; margin: -10px 0 16px; letter-spacing: 0.04em; }
 
+/* 保存完了トースト */
+.save-toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(28px, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%) translateY(12px);
+  z-index: 900;
+  padding: 12px 22px;
+  background: rgba(14, 12, 14, 0.94);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  backdrop-filter: blur(10px);
+  white-space: nowrap;
+}
+.save-toast.is-show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+@media (max-width: 520px) {
+  .save-toast {
+    font-size: 12px;
+    padding: 11px 18px;
+    bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  }
+}
+
 .secret-guide-modal { max-width: 520px; max-height: 84vh; overflow-y: auto; text-align: left; }
 .secret-guide-modal h3 { margin-bottom: 18px; }
 .secret-guide-section {
@@ -1277,6 +1311,45 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   }
   async function saveWork(id, partial) {
     await updateDoc(doc(db, "site_works", id), partial);
+  }
+
+  var _saveToastTimer = null;
+  function showSaveToast(message) {
+    message = message || "保存完了！";
+    var el = document.getElementById("save-toast");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "save-toast";
+      el.className = "save-toast";
+      el.setAttribute("role", "status");
+      el.setAttribute("aria-live", "polite");
+      document.body.appendChild(el);
+    }
+    el.textContent = message;
+    el.classList.remove("is-show");
+    // 再トリガー用にリフロー
+    void el.offsetWidth;
+    el.classList.add("is-show");
+    if (_saveToastTimer) clearTimeout(_saveToastTimer);
+    _saveToastTimer = setTimeout(function () {
+      el.classList.remove("is-show");
+    }, 2200);
+  }
+
+  /** 編集中の作品本文を保存（サイドバーから。実体はツールバーの保存ボタン） */
+  function saveCurrentWorkEdits() {
+    var main = app.querySelector("#honbun");
+    if (!main || !main.classList.contains("is-editing")) {
+      alert("保存できる編集中の本文がありません");
+      return;
+    }
+    var saveBtn = document.querySelector("#inline-editor-toolbar [data-save]");
+    if (!saveBtn) {
+      alert("保存ボタンが見つかりません。編集モードで作品ページを開いてください");
+      return;
+    }
+    if (saveBtn.disabled) return;
+    saveBtn.click();
   }
 
   function slugifyId(title) {
@@ -2141,6 +2214,10 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
     // ---- 操作 ----
     html += '<div class="sidebar-label">操作</div>';
+    // 編集モードかつ作品ページでは最上部に「保存」
+    if (isManaging() && !onHome) {
+      html += '<button type="button" class="is-accent" data-action="save-work">保存</button>';
+    }
     html += '<button type="button" data-action="page-top">ページトップへ</button>';
     if (!onHome) {
       html += '<button type="button" data-action="home">トップページへ</button>';
@@ -2200,6 +2277,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         } else if (act === "work") {
           var wid = btn.getAttribute("data-work-id");
           if (wid) location.hash = "#/work/" + encodeURIComponent(wid);
+        } else if (act === "save-work") {
+          saveCurrentWorkEdits();
         } else if (act === "login") {
           openLoginModal();
         } else if (act === "toggle-manage") {
@@ -3017,11 +3096,10 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     }
 
     saveBtn.addEventListener("click", async function () {
+      if (saveBtn.disabled) return;
       saveBtn.textContent = "保存中...";
       saveBtn.disabled = true;
       try {
-        // 保存中もツールバーを残し、完了後にスムーズに再表示する
-        // （全ページ再描画だと管理メニューが一瞬消えるため、キャッシュ更新＋ソフト再入場）
         var html = rebuildWorkHtmlFromFlat(main);
         await saveWork(work.id, { content: html });
         work.content = html;
@@ -3032,10 +3110,10 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         var scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
         clearEditAttrs();
         if (toolbar.parentNode) toolbar.parentNode.removeChild(toolbar);
-        // 本文だけ構造化 HTML に戻してから、編集モードへ再入場（スクロール位置維持）
         main.innerHTML = formatContent(html);
         attachWorkInteractions();
         enterInlineBodyEdit(work, { preserveScroll: true, scrollY: scrollY });
+        showSaveToast("保存完了！");
       } catch (err) {
         alert("保存に失敗しました: " + (err && err.message ? err.message : err));
         saveBtn.textContent = "保存";
