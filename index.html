@@ -800,22 +800,48 @@ main#honbun.is-editing:focus {
   box-shadow: inset 0 0 0 1px rgba(154,139,122,0.55);
 }
 main#honbun.is-editing a { pointer-events: none; cursor: text; }
-main#honbun.is-editing > h2.section-title {
-  font-size: 15px; font-weight: normal; color: var(--fg-dim); text-align: center;
-  letter-spacing: 0.2em; margin: 72px 0 40px; padding-bottom: 16px; border-bottom: 1px solid var(--line);
-  scroll-margin-top: 88px;
+main#honbun.is-editing .chapter-edit-block {
+  margin: 0 0 28px;
+  padding: 0 0 8px;
 }
-main#honbun.is-editing > h2.section-title:first-child { margin-top: 0; }
-main#honbun.is-editing > h2.section-title.is-jump-target {
+main#honbun.is-editing .chapter-edit-block + .chapter-edit-block {
+  border-top: 1px solid rgba(154,139,122,0.12);
+  padding-top: 8px;
+}
+main#honbun.is-editing .chapter-edit-title,
+main#honbun.is-editing h2.section-title {
+  font-size: 15px; font-weight: normal; color: var(--fg-dim); text-align: center;
+  letter-spacing: 0.2em; margin: 48px 0 24px; padding: 10px 12px 14px;
+  border-bottom: 1px solid var(--line);
+  scroll-margin-top: 88px;
+  outline: none;
+  border-radius: 2px;
+}
+main#honbun.is-editing .chapter-edit-block:first-child .chapter-edit-title { margin-top: 8px; }
+main#honbun.is-editing .chapter-edit-title:focus {
+  box-shadow: inset 0 0 0 1px rgba(154,139,122,0.45);
+  background: rgba(154,139,122,0.06);
+}
+main#honbun.is-editing h2.section-title.is-jump-target,
+main#honbun.is-editing .chapter-edit-title.is-jump-target {
   background: rgba(154,139,122,0.12);
   box-shadow: inset 0 0 0 4px rgba(154,139,122,0.12);
   border-radius: 2px;
   transition: background 0.4s ease, box-shadow 0.4s ease;
 }
-main#honbun.is-editing > p {
+main#honbun.is-editing .chapter-edit-body {
+  outline: none;
+  min-height: 2.5em;
+  padding: 4px 6px 12px;
+  border-radius: 2px;
+}
+main#honbun.is-editing .chapter-edit-body:focus {
+  box-shadow: inset 0 0 0 1px rgba(154,139,122,0.35);
+}
+main#honbun.is-editing .chapter-edit-body > p {
   margin: 0 0 1.4em; text-indent: 1em;
 }
-main#honbun.is-editing > p.no-indent { text-indent: 0; }
+main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
 @media (max-width: 520px) {
   html, body, #app {
     overflow-x: hidden !important;
@@ -2765,53 +2791,112 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
     if (!parts.length) return;
 
-    var html = "";
+    // 章ごとにブロック化：タイトルと本文を独立した contenteditable にするため
+    var chapters = [];
+    var current = null;
+    function ensureChapter() {
+      if (!current) current = { title: "", body: [] };
+    }
     parts.forEach(function (part) {
       if (part.kind === "h2") {
-        html += '<h2 class="section-title">' + softBreakTitle(part.text) + "</h2>\n";
-      } else if (part.kind === "hr") {
-        html += '<hr class="scene-break" />\n';
+        if (current) chapters.push(current);
+        current = { title: part.text || "", body: [] };
       } else {
-        html += "<p" + (part.noIndent ? ' class="no-indent"' : "") + ">" + esc(part.text) + "</p>\n";
+        ensureChapter();
+        current.body.push(part);
       }
+    });
+    if (current) chapters.push(current);
+    if (!chapters.length) chapters.push({ title: "", body: [] });
+
+    var html = "";
+    chapters.forEach(function (ch, i) {
+      html += '<div class="chapter-edit-block" data-chapter-idx="' + i + '">\n';
+      html += '  <h2 class="section-title chapter-edit-title" contenteditable="true" spellcheck="false">' +
+        softBreakTitle(ch.title || ("第" + (i + 1) + "話")) + "</h2>\n";
+      html += '  <div class="chapter-edit-body" contenteditable="true" spellcheck="false">\n';
+      if (!ch.body.length) {
+        html += '    <p>（ここに本文を書いてください）</p>\n';
+      } else {
+        ch.body.forEach(function (part) {
+          if (part.kind === "hr") {
+            html += '    <hr class="scene-break" />\n';
+          } else {
+            html += "    <p" + (part.noIndent ? ' class="no-indent"' : "") + ">" + esc(part.text) + "</p>\n";
+          }
+        });
+      }
+      html += "  </div>\n</div>\n";
     });
     main.innerHTML = html;
   }
 
-  /** フラット DOM → 保存用（目次・section 付き）HTML */
+  /** フラット DOM（章ブロック） → 保存用（目次・section 付き）HTML */
   function rebuildWorkHtmlFromFlat(main) {
-    var children = Array.prototype.slice.call(main.children);
     var chapters = [];
-    var current = { title: null, paras: [] };
+    var blocks = main.querySelectorAll(".chapter-edit-block");
 
-    function pushCurrent() {
-      if (current.title || current.paras.length) chapters.push(current);
-      current = { title: null, paras: [] };
-    }
-
-    children.forEach(function (el) {
-      if (el.tagName === "H2") {
-        pushCurrent();
-        current.title = (el.textContent || "").trim();
-      } else if (el.tagName === "HR" || (el.classList && el.classList.contains("scene-break"))) {
-        current.paras.push({ sceneBreak: true });
-      } else if (el.tagName === "P") {
-        var t = (el.textContent || "").trim();
-        if (t) {
-          current.paras.push({
-            text: t,
-            noIndent: el.classList.contains("no-indent") || /^[「『（(\[【─―—]/.test(t)
+    if (blocks.length) {
+      blocks.forEach(function (block) {
+        var titleEl = block.querySelector(".chapter-edit-title, h2.section-title");
+        var bodyEl = block.querySelector(".chapter-edit-body");
+        var title = titleEl ? (titleEl.textContent || "").trim() : "";
+        var paras = [];
+        if (bodyEl) {
+          Array.prototype.forEach.call(bodyEl.children, function (el) {
+            if (el.tagName === "HR" || (el.classList && el.classList.contains("scene-break"))) {
+              paras.push({ sceneBreak: true });
+              return;
+            }
+            if (el.tagName === "P") {
+              var t = (el.textContent || "").trim();
+              if (t) {
+                paras.push({
+                  text: t,
+                  noIndent: el.classList.contains("no-indent") || /^[「『（(\[【─―—]/.test(t)
+                });
+              }
+            } else {
+              var t2 = (el.textContent || "").trim();
+              if (t2) {
+                paras.push({ text: t2, noIndent: /^[「『（(\[【─―—]/.test(t2) });
+              }
+            }
           });
         }
-      } else {
-        // ブラウザが挿入した div など → テキストを段落化
-        var t = (el.textContent || "").trim();
-        if (t) {
-          current.paras.push({ text: t, noIndent: /^[「『（(\[【─―—]/.test(t) });
-        }
+        chapters.push({ title: title, paras: paras });
+      });
+    } else {
+      // 旧フラット構造のフォールバック
+      var children = Array.prototype.slice.call(main.children);
+      var current = { title: null, paras: [] };
+      function pushCurrent() {
+        if (current.title || current.paras.length) chapters.push(current);
+        current = { title: null, paras: [] };
       }
-    });
-    pushCurrent();
+      children.forEach(function (el) {
+        if (el.tagName === "H2") {
+          pushCurrent();
+          current.title = (el.textContent || "").trim();
+        } else if (el.tagName === "HR" || (el.classList && el.classList.contains("scene-break"))) {
+          current.paras.push({ sceneBreak: true });
+        } else if (el.tagName === "P") {
+          var t = (el.textContent || "").trim();
+          if (t) {
+            current.paras.push({
+              text: t,
+              noIndent: el.classList.contains("no-indent") || /^[「『（(\[【─―—]/.test(t)
+            });
+          }
+        } else {
+          var t3 = (el.textContent || "").trim();
+          if (t3) {
+            current.paras.push({ text: t3, noIndent: /^[「『（(\[【─―—]/.test(t3) });
+          }
+        }
+      });
+      pushCurrent();
+    }
 
     // テキストノードのみのゴミも拾う
     if (!chapters.length) {
@@ -2952,10 +3037,18 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
     // 章ジャンプ用 select を構築
     var jump = toolbar.querySelector("#chapter-jump");
-    var headings = Array.prototype.slice.call(main.querySelectorAll("h2.section-title"));
+    function listChapterTitles() {
+      return Array.prototype.slice.call(main.querySelectorAll(".chapter-edit-title, h2.section-title"));
+    }
+    function listChapterBlocks() {
+      return Array.prototype.slice.call(main.querySelectorAll(".chapter-edit-block"));
+    }
+    var headings = listChapterTitles();
     jump.innerHTML = '<option value="">— 章を選択 —</option>';
     headings.forEach(function (h, i) {
       h.setAttribute("data-chapter-idx", String(i));
+      var block = h.closest ? h.closest(".chapter-edit-block") : null;
+      if (block) block.setAttribute("data-chapter-idx", String(i));
       var opt = document.createElement("option");
       opt.value = String(i);
       opt.textContent = (h.textContent || "").trim() || ("章 " + (i + 1));
@@ -2963,23 +3056,27 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     });
 
     function jumpToChapter(idx, highlight) {
-      var h = main.querySelector('h2.section-title[data-chapter-idx="' + idx + '"]');
+      var blocks = listChapterBlocks();
+      var block = blocks[idx];
+      var h = block
+        ? block.querySelector(".chapter-edit-title, h2.section-title")
+        : main.querySelector('h2.section-title[data-chapter-idx="' + idx + '"]');
       if (!h) return;
       h.scrollIntoView({ behavior: "smooth", block: "start" });
       if (highlight) {
-        main.querySelectorAll("h2.section-title.is-jump-target").forEach(function (el) {
+        main.querySelectorAll(".chapter-edit-title.is-jump-target, h2.section-title.is-jump-target").forEach(function (el) {
           el.classList.remove("is-jump-target");
         });
         h.classList.add("is-jump-target");
         setTimeout(function () { h.classList.remove("is-jump-target"); }, 1600);
       }
       try {
-        h.focus();
+        var body = block ? block.querySelector(".chapter-edit-body") : null;
+        var target = body || h;
+        target.focus();
         var range = document.createRange();
-        // 見出しの次の段落先頭へキャレット
-        var next = h.nextElementSibling;
-        var target = (next && next.tagName === "P") ? next : h;
-        range.selectNodeContents(target);
+        var firstP = body ? body.querySelector("p") : null;
+        range.selectNodeContents(firstP || target);
         range.collapse(true);
         var sel = window.getSelection();
         sel.removeAllRanges();
@@ -2994,27 +3091,44 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
     function appendChapter(title) {
       title = (title || "").trim() || "新しい章";
+      var block = document.createElement("div");
+      block.className = "chapter-edit-block";
       var h2 = document.createElement("h2");
-      h2.className = "section-title";
+      h2.className = "section-title chapter-edit-title";
+      h2.setAttribute("contenteditable", "true");
+      h2.setAttribute("spellcheck", "false");
       h2.textContent = title;
+      var body = document.createElement("div");
+      body.className = "chapter-edit-body";
+      body.setAttribute("contenteditable", "true");
+      body.setAttribute("spellcheck", "false");
       var p = document.createElement("p");
       p.textContent = "（ここに本文を書いてください）";
-      main.appendChild(h2);
-      main.appendChild(p);
+      body.appendChild(p);
+      block.appendChild(h2);
+      block.appendChild(body);
+      main.appendChild(block);
+      bindChapterEditors(block);
       refreshChapterJump();
-      var idx = main.querySelectorAll("h2.section-title").length - 1;
+      var idx = listChapterBlocks().length - 1;
       jump.value = String(idx);
       setTimeout(function () { jumpToChapter(String(idx), true); }, 30);
     }
 
     function removeChapterByIndex(idx) {
-      var list = Array.prototype.slice.call(main.querySelectorAll("h2.section-title"));
+      var blocks = listChapterBlocks();
+      if (blocks[idx]) {
+        blocks[idx].parentNode.removeChild(blocks[idx]);
+        refreshChapterJump();
+        return;
+      }
+      // 旧構造フォールバック
+      var list = listChapterTitles();
       var h = list[idx];
       if (!h) return;
       var el = h;
       while (el) {
         var next = el.nextElementSibling;
-        var tag = el.tagName;
         el.parentNode.removeChild(el);
         if (next && next.tagName === "H2") break;
         el = next;
@@ -3081,7 +3195,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         alert("先に「章へ移動」から削除する章を選んでください");
         return;
       }
-      var list = Array.prototype.slice.call(main.querySelectorAll("h2.section-title"));
+      var list = listChapterTitles();
       var name = list[idx] ? (list[idx].textContent || "").trim() : "";
       if (!window.confirm("章「" + name + "」を削除しますか？\n（保存するまで反映されません）")) return;
       removeChapterByIndex(Number(idx));
@@ -3090,7 +3204,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
     main.classList.add("is-editing");
     document.body.classList.add("is-editing");
-    main.setAttribute("contenteditable", "true");
+    // 章タイトル／本文はそれぞれ独立した contenteditable（main 自体は編集不可）
+    main.removeAttribute("contenteditable");
     main.setAttribute("spellcheck", "false");
 
     var _kbBaseH = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
@@ -3105,8 +3220,6 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
         document.body.classList.remove("keyboard-open");
         return;
       }
-      // ツールバー内の入力・セレクトにフォーカスがあるときは隠さない
-      // （章タイトル入力・章ジャンプなどが使えなくなるため）
       var active = document.activeElement;
       if (active && toolbar.contains(active)) {
         var tag = active.tagName;
@@ -3149,50 +3262,114 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     main.addEventListener("blur", onEditorBlur, true);
     main.addEventListener("input", onKbViewportChange);
 
-    function onPaste(e) {
+    function insertHtmlAtSelection(html) {
+      if (!html) return;
+      if (document.queryCommandSupported && document.queryCommandSupported("insertHTML")) {
+        document.execCommand("insertHTML", false, html);
+        return;
+      }
+      var sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        var range = sel.getRangeAt(0);
+        range.deleteContents();
+        var tmp = document.createElement("div");
+        tmp.innerHTML = html;
+        var frag = document.createDocumentFragment();
+        var node;
+        while ((node = tmp.firstChild)) frag.appendChild(node);
+        range.insertNode(frag);
+      }
+    }
+
+    function onBodyPaste(e) {
       e.preventDefault();
       e.stopPropagation();
       var clip = e.clipboardData || window.clipboardData;
       var text = clip ? clip.getData("text/plain") : "";
       if (!text) return;
+      // 章タイトル行（# 見出し）は本文貼り付け時には段落として扱い、新規章は作らない
+      text = String(text).replace(/^#+\s+/gm, "");
       var html = plainChunksToParagraphHtml(text);
-      if (!html) return;
-      if (document.queryCommandSupported && document.queryCommandSupported("insertHTML")) {
-        document.execCommand("insertHTML", false, html);
-      } else {
-        var sel = window.getSelection();
-        if (sel && sel.rangeCount) {
-          var range = sel.getRangeAt(0);
-          range.deleteContents();
-          var tmp = document.createElement("div");
-          tmp.innerHTML = html;
-          var frag = document.createDocumentFragment();
-          var node;
-          while ((node = tmp.firstChild)) frag.appendChild(node);
-          range.insertNode(frag);
-        }
-      }
-      // 貼付け後に章リストを更新
+      insertHtmlAtSelection(html);
       refreshChapterJump();
     }
-    main.addEventListener("paste", onPaste);
 
-    function onDrop(e) {
+    function onTitlePaste(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var clip = e.clipboardData || window.clipboardData;
+      var text = clip ? clip.getData("text/plain") : "";
+      if (!text) return;
+      // タイトルは1行のみ
+      var one = String(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").map(function (l) {
+        return l.trim();
+      }).filter(Boolean).join("　");
+      if (document.queryCommandSupported && document.queryCommandSupported("insertText")) {
+        document.execCommand("insertText", false, one);
+      } else {
+        insertHtmlAtSelection(esc(one));
+      }
+      refreshChapterJump();
+    }
+
+    function onBodyDrop(e) {
       e.preventDefault();
       var text = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
       if (!text) return;
+      text = String(text).replace(/^#+\s+/gm, "");
       var html = plainChunksToParagraphHtml(text);
-      if (html) document.execCommand("insertHTML", false, html);
+      insertHtmlAtSelection(html);
       refreshChapterJump();
     }
-    main.addEventListener("drop", onDrop);
+
+    function bindChapterEditors(scope) {
+      scope = scope || main;
+      scope.querySelectorAll(".chapter-edit-body").forEach(function (body) {
+        if (body.getAttribute("data-edit-bound") === "1") return;
+        body.setAttribute("data-edit-bound", "1");
+        body.setAttribute("contenteditable", "true");
+        body.setAttribute("spellcheck", "false");
+        body.addEventListener("paste", onBodyPaste);
+        body.addEventListener("drop", onBodyDrop);
+      });
+      scope.querySelectorAll(".chapter-edit-title").forEach(function (title) {
+        if (title.getAttribute("data-edit-bound") === "1") return;
+        title.setAttribute("data-edit-bound", "1");
+        title.setAttribute("contenteditable", "true");
+        title.setAttribute("spellcheck", "false");
+        title.addEventListener("paste", onTitlePaste);
+        // Enter で本文へ移動
+        title.addEventListener("keydown", function (ev) {
+          if (ev.key === "Enter") {
+            ev.preventDefault();
+            var block = title.closest(".chapter-edit-block");
+            var body = block && block.querySelector(".chapter-edit-body");
+            if (body) {
+              body.focus();
+              try {
+                var r = document.createRange();
+                var p = body.querySelector("p") || body;
+                r.selectNodeContents(p);
+                r.collapse(true);
+                var s = window.getSelection();
+                s.removeAllRanges();
+                s.addRange(r);
+              } catch (err) {}
+            }
+          }
+        });
+      });
+    }
+    bindChapterEditors(main);
 
     function refreshChapterJump() {
       var cur = jump.value;
-      headings = Array.prototype.slice.call(main.querySelectorAll("h2.section-title"));
+      headings = listChapterTitles();
       jump.innerHTML = '<option value="">— 章を選択 —</option>';
       headings.forEach(function (h, i) {
         h.setAttribute("data-chapter-idx", String(i));
+        var block = h.closest ? h.closest(".chapter-edit-block") : null;
+        if (block) block.setAttribute("data-chapter-idx", String(i));
         var opt = document.createElement("option");
         opt.value = String(i);
         opt.textContent = (h.textContent || "").trim() || ("章 " + (i + 1));
@@ -3227,8 +3404,11 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       setTimeout(function () { jumpToChapter(String(focusIdx), true); }, 50);
     } else {
       try {
-        main.focus();
-        var first = main.querySelector("p, h2");
+        var firstBody = main.querySelector(".chapter-edit-body");
+        var first = firstBody
+          ? (firstBody.querySelector("p") || firstBody)
+          : main.querySelector("p, h2");
+        if (firstBody) firstBody.focus();
         if (first) {
           var range = document.createRange();
           range.selectNodeContents(first);
@@ -3276,8 +3456,11 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       document.body.classList.remove("keyboard-open");
       main.removeAttribute("contenteditable");
       main.removeAttribute("spellcheck");
-      main.removeEventListener("paste", onPaste);
-      main.removeEventListener("drop", onDrop);
+      main.querySelectorAll(".chapter-edit-title, .chapter-edit-body").forEach(function (el) {
+        el.removeAttribute("contenteditable");
+        el.removeAttribute("spellcheck");
+        el.removeAttribute("data-edit-bound");
+      });
       main.removeEventListener("focus", onEditorFocus, true);
       main.removeEventListener("blur", onEditorBlur, true);
       main.removeEventListener("input", onKbViewportChange);
