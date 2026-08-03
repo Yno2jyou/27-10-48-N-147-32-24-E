@@ -415,6 +415,17 @@ body.keyboard-open .site-menu-btn { display: none !important; }
   font-family: var(--font-body); font-size: 14px; letter-spacing: 0.06em;
   padding: 11px 22px 11px 28px;
   color: var(--fg);
+  white-space: normal;
+  line-height: 1.55;
+  text-align: left;
+}
+/* 閲覧時の章ジャンプハイライト */
+.section.is-jump-target,
+.chapter-edit-block.is-jump-target {
+  background: rgba(154,139,122,0.08);
+  box-shadow: inset 0 0 0 4px rgba(154,139,122,0.1);
+  border-radius: 2px;
+  transition: background 0.4s ease, box-shadow 0.4s ease;
 }
 .site-sidebar-nav button.is-work .work-num {
   display: block;
@@ -2458,36 +2469,142 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     }
 
     siteSidebarNav.innerHTML = html;
+    bindSidebarNavActions();
+  }
 
+  /** 作品ページから章一覧を取得（閲覧・編集共通） */
+  function collectWorkChapters() {
+    var items = [];
+    var editTitles = app.querySelectorAll(".chapter-edit-title");
+    if (editTitles.length) {
+      editTitles.forEach(function (h, i) {
+        var t = (h.textContent || "").replace(/\s+/g, " ").trim();
+        items.push({
+          idx: i,
+          title: t || ("章 " + (i + 1)),
+          el: h.closest(".chapter-edit-block") || h
+        });
+      });
+      return items;
+    }
+    var sections = app.querySelectorAll("#honbun .section, main .section");
+    if (sections.length) {
+      sections.forEach(function (sec, i) {
+        var h = sec.querySelector(".section-title");
+        var t = h ? (h.textContent || "").replace(/\s+/g, " ").trim() : "";
+        items.push({
+          idx: i,
+          title: t || ("第" + (i + 1) + "話"),
+          id: sec.id || ("ch" + i),
+          el: h || sec
+        });
+      });
+      return items;
+    }
+    // 目次リンクから拾う
+    var tocLinks = app.querySelectorAll("#toc a[href^='#']");
+    tocLinks.forEach(function (a, i) {
+      var href = a.getAttribute("href") || "";
+      var id = href.charAt(0) === "#" ? href.slice(1) : "";
+      var t = (a.textContent || "").replace(/\s+/g, " ").trim();
+      items.push({
+        idx: i,
+        title: t || ("章 " + (i + 1)),
+        id: id,
+        el: id ? document.getElementById(id) : null
+      });
+    });
+    return items;
+  }
+
+  function jumpToWorkChapter(item) {
+    if (!item) return;
+    // 編集モード：ツールバーの章ジャンプと同期
+    var jumpEl = document.getElementById("chapter-jump");
+    if (jumpEl && document.body.classList.contains("is-editing")) {
+      jumpEl.value = String(item.idx);
+      try {
+        jumpEl.dispatchEvent(new Event("change", { bubbles: true }));
+      } catch (err) {}
+    }
+    var target = item.el;
+    if (!target && item.id) target = document.getElementById(item.id);
+    if (!target) {
+      var blocks = app.querySelectorAll(".chapter-edit-block, #honbun .section, main .section");
+      target = blocks[item.idx] || null;
+    }
+    if (!target) return;
+    try {
+      var top = target.getBoundingClientRect().top + (window.pageYOffset || 0) - 12;
+      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    } catch (err) {
+      try { target.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e2) {}
+    }
+    // 軽いハイライト
+    try {
+      target.classList.add("is-jump-target");
+      setTimeout(function () { target.classList.remove("is-jump-target"); }, 1600);
+    } catch (err) {}
+  }
+
+  function showSidebarChapterList() {
+    if (!siteSidebarNav) return;
+    var chapters = collectWorkChapters();
+    var html = "";
+    html += '<button type="button" data-action="toc-back">← メニューに戻る</button>';
+    html += '<div class="sidebar-label">目次（章一覧）</div>';
+    if (!chapters.length) {
+      html += '<div class="sidebar-empty">章がありません</div>';
+    } else {
+      chapters.forEach(function (ch) {
+        html += '<button type="button" class="is-work" data-action="jump-chapter" data-chapter-idx="' +
+          ch.idx + '"' + (ch.id ? ' data-chapter-id="' + esc(ch.id) + '"' : "") + ">" +
+          esc(ch.title) + "</button>";
+      });
+    }
+    siteSidebarNav.innerHTML = html;
+    // 章データをボタンに紐づけ（クロージャ）
+    siteSidebarNav.querySelectorAll("[data-action='jump-chapter']").forEach(function (btn) {
+      var idx = Number(btn.getAttribute("data-chapter-idx"));
+      btn._chapterItem = chapters[idx] || null;
+    });
+    bindSidebarNavActions();
+  }
+
+  function bindSidebarNavActions() {
+    if (!siteSidebarNav) return;
     siteSidebarNav.querySelectorAll("[data-action]").forEach(function (btn) {
       btn.addEventListener("click", function (e) {
         e.preventDefault();
         e.stopPropagation();
         var act = btn.getAttribute("data-action");
+
+        // 目次パネル内操作はサイドバーを閉じない
+        if (act === "toc") {
+          showSidebarChapterList();
+          return;
+        }
+        if (act === "toc-back") {
+          rebuildSidebarNav();
+          return;
+        }
+        if (act === "jump-chapter") {
+          var item = btn._chapterItem;
+          if (!item) {
+            item = {
+              idx: Number(btn.getAttribute("data-chapter-idx")),
+              id: btn.getAttribute("data-chapter-id") || "",
+              title: (btn.textContent || "").trim()
+            };
+          }
+          closeSidebar();
+          setTimeout(function () { jumpToWorkChapter(item); }, 50);
+          return;
+        }
+
         closeSidebar();
         if (act === "page-top") {
           window.scrollTo({ top: 0, behavior: "smooth" });
-        } else if (act === "toc") {
-          // 作品ページの目次を開いてスクロール
-          var toc = app.querySelector("#toc");
-          if (toc) {
-            toc.classList.add("is-open");
-            setTimeout(function () {
-              try {
-                var top = toc.getBoundingClientRect().top + (window.pageYOffset || 0) - 12;
-                window.scrollTo({ top: top, behavior: "smooth" });
-              } catch (err) {
-                toc.scrollIntoView({ behavior: "smooth", block: "start" });
-              }
-            }, 30);
-          } else if (isManaging()) {
-            // 編集中はツールバーの章ジャンプを開く
-            var jumpEl = document.querySelector("#chapter-jump");
-            if (jumpEl) {
-              try { jumpEl.focus(); jumpEl.click(); } catch (err) {}
-              jumpEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
-            }
-          }
         } else if (act === "home") {
           location.hash = "#/";
         } else if (act === "work") {
