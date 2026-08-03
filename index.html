@@ -2397,11 +2397,23 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     siteSidebarOverlay.setAttribute("aria-hidden", "true");
   }
 
+  function scrollSidebarToTop() {
+    // メニューを開くたびに先頭（保存・目次など）が見えるようにする
+    try {
+      if (siteSidebarNav) siteSidebarNav.scrollTop = 0;
+      var sidebar = siteSidebarOverlay && siteSidebarOverlay.querySelector(".site-sidebar");
+      if (sidebar) sidebar.scrollTop = 0;
+    } catch (err) {}
+  }
+
   function openSidebar() {
     if (!siteSidebarOverlay) return;
     rebuildSidebarNav();
     siteSidebarOverlay.classList.add("is-open");
     siteSidebarOverlay.setAttribute("aria-hidden", "false");
+    // 描画後に先頭へ（保存・目次など操作欄を必ず表示）
+    scrollSidebarToTop();
+    requestAnimationFrame(function () { scrollSidebarToTop(); });
   }
 
   function rebuildSidebarNav() {
@@ -2470,6 +2482,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
 
     siteSidebarNav.innerHTML = html;
     bindSidebarNavActions();
+    scrollSidebarToTop();
   }
 
   /** 作品ページから章一覧を取得（閲覧・編集共通） */
@@ -2569,6 +2582,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       btn._chapterItem = chapters[idx] || null;
     });
     bindSidebarNavActions();
+    scrollSidebarToTop();
   }
 
   function bindSidebarNavActions() {
