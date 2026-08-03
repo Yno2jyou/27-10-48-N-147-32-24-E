@@ -232,6 +232,26 @@ nav.work-nav a { margin: 0 10px; border-bottom: 1px dotted var(--accent); }
 main p { margin: 0 0 1.4em; text-indent: 1em; }
 main p.no-indent { text-indent: 0; }
 
+/* 場面区切り（コピペ時の空行 → 区切り線） */
+hr.scene-break,
+.scene-break {
+  border: 0;
+  height: 0;
+  margin: 2.6em auto;
+  padding: 0;
+  width: min(42%, 160px);
+  border-top: 1px solid var(--line);
+  opacity: 0.85;
+  display: block;
+  background: none;
+}
+main#honbun.is-editing hr.scene-break,
+main#honbun.is-editing .scene-break {
+  margin: 1.8em auto;
+  border-top-color: var(--accent-soft);
+  opacity: 1;
+}
+
 .afterword-section { max-width: var(--max-width); margin: 0 auto; padding: 0 24px 60px; text-align: center; }
 .afterword-toggle {
   background: none; border: 1px solid var(--line); color: var(--fg-dim); font-family: var(--font-mono);
@@ -1040,24 +1060,37 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   }
 
   function splitParas(body) {
+    // 戻り値: 文字列（段落）または { sceneBreak: true }
     var paras = [];
     var buf = [];
+    var pendingBreak = false;
     String(body || "").split("\n").forEach(function (ln) {
       if (ln.trim() === "") {
         if (buf.length) {
           paras.push(buf.join(""));
           buf = [];
+          pendingBreak = true;
+        } else if (paras.length) {
+          pendingBreak = true;
         }
       } else {
+        if (pendingBreak && paras.length) {
+          paras.push({ sceneBreak: true });
+          pendingBreak = false;
+        }
         buf.push(ln.trim());
       }
     });
-    if (buf.length) paras.push(buf.join(""));
+    if (buf.length) {
+      if (pendingBreak && paras.length) paras.push({ sceneBreak: true });
+      paras.push(buf.join(""));
+    }
     return paras;
   }
 
   function parasToHtml(paras) {
     return paras.map(function (p) {
+      if (p && typeof p === "object" && p.sceneBreak) return '<hr class="scene-break" />';
       var noIndent = /^[「『（(\[【─―—]/.test(p);
       return "<p" + (noIndent ? ' class="no-indent"' : "") + ">" + esc(p) + "</p>";
     }).join("\n    ");
@@ -2164,7 +2197,13 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
   function novelBlocksToPlain(blocks) {
     var lines = [];
     blocks.forEach(function (b) {
-      if (!b || !b.text) return;
+      if (!b) return;
+      if (b.kind === "hr") {
+        // 区切り線 → 空行（前後の段落と合わせて空行1つになるよう空文字行を入れる）
+        if (lines.length && lines[lines.length - 1] !== "") lines.push("");
+        return;
+      }
+      if (!b.text) return;
       if (b.kind === "h2") {
         lines.push(b.text);
       } else {
@@ -2176,7 +2215,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
   function getNovelPlainFromSelection() {
     var main = app.querySelector("#honbun");
-    if (!main || main.classList.contains("is-editing")) return null;
+    // 閲覧・編集モード共通（編集中も改行・一字下げ・区切り線→空行を反映）
+    if (!main) return null;
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
     var range = sel.getRangeAt(0);
@@ -2184,12 +2224,16 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     if (anc.nodeType === 3) anc = anc.parentNode;
     if (!main.contains(anc) && anc !== main) return null;
 
-    var candidates = main.querySelectorAll("h2.section-title, h2.aw-title, h2, p");
+    var candidates = main.querySelectorAll("h2.section-title, h2.aw-title, h2, p, hr.scene-break, hr");
     var hit = [];
     candidates.forEach(function (el) {
       try {
         if (!sel.containsNode(el, true)) return;
       } catch (err) {
+        return;
+      }
+      if (el.tagName === "HR" || (el.classList && el.classList.contains("scene-break"))) {
+        hit.push({ kind: "hr", el: el, fully: true });
         return;
       }
       var full = normalizeNovelLine(el.textContent);
@@ -2230,6 +2274,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     }
 
     var blocks = hit.map(function (h) {
+      if (h.kind === "hr") return { kind: "hr" };
       if (h.kind === "h2") return { kind: "h2", text: h.text };
       return { kind: "p", text: h.text, indent: h.indent };
     });
@@ -2243,11 +2288,11 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       e.preventDefault();
       if (e.clipboardData) {
         e.clipboardData.setData("text/plain", plain);
-        // 簡易 HTML（段落・空行を保つ）
+        // 簡易 HTML（段落改行・一字下げ・区切り線由来の空行を保つ）
         var html = plain
           .split("\n")
-          .filter(function (line) { return line !== ""; })
           .map(function (line) {
+            if (line === "") return "<p><br></p>";
             return "<p>" + line
               .replace(/&/g, "&amp;")
               .replace(/</g, "&lt;")
@@ -2674,18 +2719,27 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
           var t = (titleEl.textContent || "").trim();
           if (t) parts.push({ kind: "h2", text: t });
         }
-        sec.querySelectorAll("p").forEach(function (p) {
-          var t = (p.textContent || "").trim();
+        Array.prototype.forEach.call(sec.children, function (el) {
+          if (el.tagName === "HR" || (el.classList && el.classList.contains("scene-break"))) {
+            parts.push({ kind: "hr" });
+            return;
+          }
+          if (el.tagName !== "P") return;
+          var t = (el.textContent || "").trim();
           if (!t) return;
           parts.push({
             kind: "p",
             text: t,
-            noIndent: p.classList.contains("no-indent")
+            noIndent: el.classList.contains("no-indent")
           });
         });
       });
     } else {
-      main.querySelectorAll("h2, p").forEach(function (el) {
+      main.querySelectorAll("h2, p, hr.scene-break, hr").forEach(function (el) {
+        if (el.tagName === "HR" || (el.classList && el.classList.contains("scene-break"))) {
+          parts.push({ kind: "hr" });
+          return;
+        }
         var t = (el.textContent || "").trim();
         if (!t) return;
         if (el.tagName === "H2") parts.push({ kind: "h2", text: t });
@@ -2698,9 +2752,14 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     if (aw) {
       var awTitle = aw.querySelector(".aw-title");
       parts.push({ kind: "h2", text: ((awTitle && awTitle.textContent) || "あとがき").trim() });
-      aw.querySelectorAll("p").forEach(function (p) {
-        var t = (p.textContent || "").trim();
-        if (t) parts.push({ kind: "p", text: t, noIndent: p.classList.contains("no-indent") });
+      Array.prototype.forEach.call(aw.children, function (el) {
+        if (el.tagName === "HR" || (el.classList && el.classList.contains("scene-break"))) {
+          parts.push({ kind: "hr" });
+          return;
+        }
+        if (el.tagName !== "P") return;
+        var t = (el.textContent || "").trim();
+        if (t) parts.push({ kind: "p", text: t, noIndent: el.classList.contains("no-indent") });
       });
     }
 
@@ -2710,6 +2769,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     parts.forEach(function (part) {
       if (part.kind === "h2") {
         html += '<h2 class="section-title">' + softBreakTitle(part.text) + "</h2>\n";
+      } else if (part.kind === "hr") {
+        html += '<hr class="scene-break" />\n';
       } else {
         html += "<p" + (part.noIndent ? ' class="no-indent"' : "") + ">" + esc(part.text) + "</p>\n";
       }
@@ -2732,6 +2793,8 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       if (el.tagName === "H2") {
         pushCurrent();
         current.title = (el.textContent || "").trim();
+      } else if (el.tagName === "HR" || (el.classList && el.classList.contains("scene-break"))) {
+        current.paras.push({ sceneBreak: true });
       } else if (el.tagName === "P") {
         var t = (el.textContent || "").trim();
         if (t) {
@@ -2765,6 +2828,7 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
       var title = ch.title || "";
       var isAfterword = /^あとがき/.test(title);
       var pHtml = ch.paras.map(function (p) {
+        if (p.sceneBreak) return '<hr class="scene-break" />';
         return "<p" + (p.noIndent ? ' class="no-indent"' : "") + ">" + esc(p.text) + "</p>";
       }).join("\n    ");
 
@@ -2804,16 +2868,26 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
 
   function plainChunksToParagraphHtml(text) {
     text = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-    // クリップボードは段落の区切りが「空行」ではなく「単一改行」のことが多い
-    // → 改行ごとに段落化（空行は無視）
+    // 単一改行 → 段落／空行 → 区切り線（hr.scene-break）
     var lines = text.split("\n");
     var html = "";
     var buffer = "";
+    var pendingBreak = false;
 
     function flushBuffer() {
       var line = buffer.replace(/\s+/g, " ").trim();
       buffer = "";
       if (!line) return;
+      if (pendingBreak && html) {
+        html += '<hr class="scene-break" />';
+        pendingBreak = false;
+      }
+      // 区切り記号だけの行も区切り線に
+      if (/^(?:＊|※|\*|・|―|—|-|–|\.){1,6}$/.test(line) || /^[\*＊・](?:\s*[\*＊・]){1,5}$/.test(line)) {
+        if (html) html += '<hr class="scene-break" />';
+        pendingBreak = false;
+        return;
+      }
       var hm = line.match(/^#+\s+(.+)$/);
       if (hm) {
         html += '<h2 class="section-title">' + softBreakTitle(hm[1].trim()) + "</h2>";
@@ -2826,12 +2900,12 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     lines.forEach(function (raw) {
       var line = raw.replace(/^\s+|\s+$/g, "");
       if (!line) {
-        // 空行 → 段落区切り
-        flushBuffer();
+        // 空行 → 直前の段落を確定し、次の段落の前に区切り線
+        if (buffer) flushBuffer();
+        if (html) pendingBreak = true;
         return;
       }
       // 単一改行も段落区切りとして扱う（小説のコピペ向け）
-      // すでに buffer があれば、前の行を段落として確定してから新しい行へ
       if (buffer) flushBuffer();
       buffer = line;
     });
