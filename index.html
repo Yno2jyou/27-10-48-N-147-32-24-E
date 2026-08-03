@@ -895,7 +895,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
   }
   .inline-editor-toolbar .actions {
     order: 3; width: 100%; margin-left: 0;
-    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
     justify-content: stretch;
   }
   .inline-editor-toolbar .actions .btn {
@@ -1422,6 +1422,101 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     }
     if (saveBtn.disabled) return;
     saveBtn.click();
+  }
+
+  /* メニュー操作でフォーカスが外れても、直前の本文キャレット位置を覚えおく */
+  var _savedEditorRange = null;
+  var _savedEditorBody = null;
+  document.addEventListener("selectionchange", function () {
+    if (!document.body.classList.contains("is-editing")) return;
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount || sel.isCollapsed === undefined) return;
+    var node = sel.anchorNode;
+    if (!node) return;
+    if (node.nodeType === 3) node = node.parentNode;
+    if (!node || !node.closest) return;
+    var body = node.closest(".chapter-edit-body");
+    if (!body) return;
+    try {
+      _savedEditorRange = sel.getRangeAt(0).cloneRange();
+      _savedEditorBody = body;
+    } catch (err) {}
+  });
+
+  /** 編集中の本文キャレット位置に区切り線を挿入（メニュー／ツールバー共用） */
+  function insertSceneBreakAtCursor() {
+    if (!document.body.classList.contains("is-editing")) {
+      alert("編集モードでのみ区切り線を追加できます");
+      return;
+    }
+    var sel = window.getSelection();
+    var body = null;
+    var range = null;
+
+    if (sel && sel.rangeCount) {
+      var node = sel.anchorNode;
+      if (node && node.nodeType === 3) node = node.parentNode;
+      if (node && node.closest) body = node.closest(".chapter-edit-body");
+      if (body) {
+        try { range = sel.getRangeAt(0); } catch (err) {}
+      }
+    }
+    // メニュー操作で選択が消えている場合は保存済み位置を使う
+    if (!body && _savedEditorBody && document.body.contains(_savedEditorBody)) {
+      body = _savedEditorBody;
+      range = _savedEditorRange;
+    }
+    if (!body) {
+      var jumpEl = document.getElementById("chapter-jump");
+      var blocks = app.querySelectorAll(".chapter-edit-block");
+      var idx = jumpEl ? jumpEl.value : "";
+      var block = (idx !== "" && blocks[idx]) ? blocks[idx] : blocks[0];
+      body = block ? block.querySelector(".chapter-edit-body") : null;
+    }
+    if (!body) {
+      alert("区切り線を入れる章の本文を選択してください");
+      return;
+    }
+
+    var hr = document.createElement("hr");
+    hr.className = "scene-break";
+    try {
+      if (range && body.contains(range.commonAncestorContainer)) {
+        var r = range.cloneRange();
+        r.collapse(false);
+        var container = r.commonAncestorContainer;
+        if (container.nodeType === 3) container = container.parentNode;
+        var p = container && container.closest ? container.closest("p") : null;
+        if (p && body.contains(p)) {
+          if (p.nextSibling) body.insertBefore(hr, p.nextSibling);
+          else body.appendChild(hr);
+        } else {
+          r.insertNode(hr);
+        }
+      } else {
+        body.appendChild(hr);
+      }
+    } catch (err) {
+      body.appendChild(hr);
+    }
+
+    try {
+      body.focus();
+      var after = hr.nextElementSibling;
+      if (!after) {
+        after = document.createElement("p");
+        after.innerHTML = "<br>";
+        body.appendChild(after);
+      }
+      var r2 = document.createRange();
+      r2.selectNodeContents(after);
+      r2.collapse(true);
+      var s2 = window.getSelection();
+      s2.removeAllRanges();
+      s2.addRange(r2);
+      _savedEditorRange = r2.cloneRange();
+      _savedEditorBody = body;
+    } catch (err2) {}
   }
 
   function slugifyId(title) {
@@ -2432,6 +2527,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     // 編集モードかつ作品ページでは最上部に「保存」
     if (isManaging() && !onHome) {
       html += '<button type="button" class="is-accent" data-action="save-work">保存</button>';
+      html += '<button type="button" data-action="add-break">区切り線</button>';
     }
     if (!onHome) {
       html += '<button type="button" data-action="toc">目次</button>';
@@ -2613,6 +2709,11 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
           }
           closeSidebar();
           setTimeout(function () { jumpToWorkChapter(item); }, 50);
+          return;
+        }
+        if (act === "add-break") {
+          closeSidebar();
+          setTimeout(function () { insertSceneBreakAtCursor(); }, 40);
           return;
         }
 
@@ -3186,7 +3287,6 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       '<div class="actions">' +
       '<button type="button" class="btn" data-add-chapter>章を追加</button>' +
       '<button type="button" class="btn" data-del-chapter>章を削除</button>' +
-      '<button type="button" class="btn" data-add-break>区切り線</button>' +
       '<button type="button" class="btn primary" data-save>保存</button>' +
       '</div>';
     main.parentNode.insertBefore(toolbar, main);
@@ -3341,72 +3441,6 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
         if (ev.key === "Enter") { ev.preventDefault(); }
         if (ev.key === "Escape") { if (row.parentNode) row.parentNode.removeChild(row); }
       });
-    });
-
-    function insertSceneBreakAtCursor() {
-      var sel = window.getSelection();
-      var body = null;
-      if (sel && sel.rangeCount) {
-        var node = sel.anchorNode;
-        if (node && node.nodeType === 3) node = node.parentNode;
-        if (node && node.closest) body = node.closest(".chapter-edit-body");
-      }
-      if (!body) {
-        // フォーカスが本文にない場合：選択中の章 or 先頭章の末尾へ
-        var idx = jump.value;
-        var blocks = listChapterBlocks();
-        var block = (idx !== "" && blocks[idx]) ? blocks[idx] : blocks[0];
-        body = block ? block.querySelector(".chapter-edit-body") : null;
-      }
-      if (!body) {
-        alert("区切り線を入れる章の本文を選択してください");
-        return;
-      }
-      var hr = document.createElement("hr");
-      hr.className = "scene-break";
-      try {
-        if (sel && sel.rangeCount && body.contains(sel.anchorNode)) {
-          var range = sel.getRangeAt(0);
-          range.collapse(false);
-          // 段落の途中なら段落を分割せず、直後に挿入
-          var container = range.commonAncestorContainer;
-          if (container.nodeType === 3) container = container.parentNode;
-          var p = container && container.closest ? container.closest("p") : null;
-          if (p && body.contains(p)) {
-            if (p.nextSibling) body.insertBefore(hr, p.nextSibling);
-            else body.appendChild(hr);
-          } else {
-            range.insertNode(hr);
-          }
-        } else {
-          body.appendChild(hr);
-        }
-      } catch (err) {
-        body.appendChild(hr);
-      }
-      // キャレットを区切り線の次へ
-      try {
-        body.focus();
-        var after = hr.nextElementSibling;
-        if (!after) {
-          after = document.createElement("p");
-          after.innerHTML = "<br>";
-          body.appendChild(after);
-        }
-        var r2 = document.createRange();
-        r2.selectNodeContents(after);
-        r2.collapse(true);
-        var s2 = window.getSelection();
-        s2.removeAllRanges();
-        s2.addRange(r2);
-      } catch (err2) {}
-    }
-
-    var addBreakBtn = toolbar.querySelector("[data-add-break]");
-    if (addBreakBtn) addBreakBtn.addEventListener("click", function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      insertSceneBreakAtCursor();
     });
 
     var delChapterBtn = toolbar.querySelector("[data-del-chapter]");
