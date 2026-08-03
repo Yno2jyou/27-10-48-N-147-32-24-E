@@ -884,7 +884,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
   }
   .inline-editor-toolbar .actions {
     order: 3; width: 100%; margin-left: 0;
-    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
     justify-content: stretch;
   }
   .inline-editor-toolbar .actions .btn {
@@ -2410,6 +2410,9 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     if (isManaging() && !onHome) {
       html += '<button type="button" class="is-accent" data-action="save-work">保存</button>';
     }
+    if (!onHome) {
+      html += '<button type="button" data-action="toc">目次</button>';
+    }
     html += '<button type="button" data-action="page-top">ページトップへ</button>';
     if (!onHome) {
       html += '<button type="button" data-action="home">トップページへ</button>';
@@ -2464,6 +2467,27 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
         closeSidebar();
         if (act === "page-top") {
           window.scrollTo({ top: 0, behavior: "smooth" });
+        } else if (act === "toc") {
+          // 作品ページの目次を開いてスクロール
+          var toc = app.querySelector("#toc");
+          if (toc) {
+            toc.classList.add("is-open");
+            setTimeout(function () {
+              try {
+                var top = toc.getBoundingClientRect().top + (window.pageYOffset || 0) - 12;
+                window.scrollTo({ top: top, behavior: "smooth" });
+              } catch (err) {
+                toc.scrollIntoView({ behavior: "smooth", block: "start" });
+              }
+            }, 30);
+          } else if (isManaging()) {
+            // 編集中はツールバーの章ジャンプを開く
+            var jumpEl = document.querySelector("#chapter-jump");
+            if (jumpEl) {
+              try { jumpEl.focus(); jumpEl.click(); } catch (err) {}
+              jumpEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+          }
         } else if (act === "home") {
           location.hash = "#/";
         } else if (act === "work") {
@@ -3031,6 +3055,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       '<div class="actions">' +
       '<button type="button" class="btn" data-add-chapter>章を追加</button>' +
       '<button type="button" class="btn" data-del-chapter>章を削除</button>' +
+      '<button type="button" class="btn" data-add-break>区切り線</button>' +
       '<button type="button" class="btn primary" data-save>保存</button>' +
       '</div>';
     main.parentNode.insertBefore(toolbar, main);
@@ -3181,9 +3206,76 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
         if (row.parentNode) row.parentNode.removeChild(row);
       });
       input.addEventListener("keydown", function (ev) {
-        if (ev.key === "Enter") { ev.preventDefault(); doAdd(); }
+        // Enter では追加しない（「追加」ボタンでのみ確定）
+        if (ev.key === "Enter") { ev.preventDefault(); }
         if (ev.key === "Escape") { if (row.parentNode) row.parentNode.removeChild(row); }
       });
+    });
+
+    function insertSceneBreakAtCursor() {
+      var sel = window.getSelection();
+      var body = null;
+      if (sel && sel.rangeCount) {
+        var node = sel.anchorNode;
+        if (node && node.nodeType === 3) node = node.parentNode;
+        if (node && node.closest) body = node.closest(".chapter-edit-body");
+      }
+      if (!body) {
+        // フォーカスが本文にない場合：選択中の章 or 先頭章の末尾へ
+        var idx = jump.value;
+        var blocks = listChapterBlocks();
+        var block = (idx !== "" && blocks[idx]) ? blocks[idx] : blocks[0];
+        body = block ? block.querySelector(".chapter-edit-body") : null;
+      }
+      if (!body) {
+        alert("区切り線を入れる章の本文を選択してください");
+        return;
+      }
+      var hr = document.createElement("hr");
+      hr.className = "scene-break";
+      try {
+        if (sel && sel.rangeCount && body.contains(sel.anchorNode)) {
+          var range = sel.getRangeAt(0);
+          range.collapse(false);
+          // 段落の途中なら段落を分割せず、直後に挿入
+          var container = range.commonAncestorContainer;
+          if (container.nodeType === 3) container = container.parentNode;
+          var p = container && container.closest ? container.closest("p") : null;
+          if (p && body.contains(p)) {
+            if (p.nextSibling) body.insertBefore(hr, p.nextSibling);
+            else body.appendChild(hr);
+          } else {
+            range.insertNode(hr);
+          }
+        } else {
+          body.appendChild(hr);
+        }
+      } catch (err) {
+        body.appendChild(hr);
+      }
+      // キャレットを区切り線の次へ
+      try {
+        body.focus();
+        var after = hr.nextElementSibling;
+        if (!after) {
+          after = document.createElement("p");
+          after.innerHTML = "<br>";
+          body.appendChild(after);
+        }
+        var r2 = document.createRange();
+        r2.selectNodeContents(after);
+        r2.collapse(true);
+        var s2 = window.getSelection();
+        s2.removeAllRanges();
+        s2.addRange(r2);
+      } catch (err2) {}
+    }
+
+    var addBreakBtn = toolbar.querySelector("[data-add-break]");
+    if (addBreakBtn) addBreakBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      insertSceneBreakAtCursor();
     });
 
     var delChapterBtn = toolbar.querySelector("[data-del-chapter]");
