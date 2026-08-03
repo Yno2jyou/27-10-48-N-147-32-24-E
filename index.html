@@ -2144,6 +2144,129 @@ main#honbun.is-editing > p.no-indent { text-indent: 0; }
     });
   }
 
+  /* ===== 本文コピー：改行・一字下げ・空行をプレーンテキストに反映 ===== */
+  function normalizeNovelLine(s) {
+    return String(s || "")
+      .replace(/\u00a0/g, " ")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .replace(/\n+/g, "")
+      .replace(/[ \t\f\v]+/g, " ")
+      .trim();
+  }
+
+  function paragraphNeedsIndent(el, text) {
+    if (el && el.classList && el.classList.contains("no-indent")) return false;
+    if (/^[「『（(\[【─―—]/.test(text || "")) return false;
+    return true;
+  }
+
+  function novelBlocksToPlain(blocks) {
+    var lines = [];
+    blocks.forEach(function (b) {
+      if (!b || !b.text) return;
+      if (b.kind === "h2") {
+        if (lines.length) lines.push("");
+        lines.push(b.text);
+        lines.push("");
+      } else {
+        lines.push((b.indent ? "　" : "") + b.text);
+        lines.push("");
+      }
+    });
+    while (lines.length && lines[lines.length - 1] === "") lines.pop();
+    return lines.join("\n");
+  }
+
+  function getNovelPlainFromSelection() {
+    var main = app.querySelector("#honbun");
+    if (!main || main.classList.contains("is-editing")) return null;
+    var sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+    var range = sel.getRangeAt(0);
+    var anc = range.commonAncestorContainer;
+    if (anc.nodeType === 3) anc = anc.parentNode;
+    if (!main.contains(anc) && anc !== main) return null;
+
+    var candidates = main.querySelectorAll("h2.section-title, h2.aw-title, h2, p");
+    var hit = [];
+    candidates.forEach(function (el) {
+      try {
+        if (!sel.containsNode(el, true)) return;
+      } catch (err) {
+        return;
+      }
+      var full = normalizeNovelLine(el.textContent);
+      if (!full) return;
+      if (el.tagName === "H2") {
+        hit.push({ kind: "h2", el: el, text: full, fully: true });
+        return;
+      }
+      var fully = false;
+      try { fully = sel.containsNode(el, false); } catch (err) {}
+      hit.push({
+        kind: "p",
+        el: el,
+        text: full,
+        fully: fully,
+        indent: paragraphNeedsIndent(el, full)
+      });
+    });
+
+    if (!hit.length) {
+      var raw = sel.toString();
+      if (!raw || !String(raw).trim()) return null;
+      return String(raw).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    }
+
+    // 1段落の部分選択：選択文字列を使い、段落先頭からの選択なら一字下げ
+    if (hit.length === 1 && hit[0].kind === "p" && !hit[0].fully) {
+      var partial = normalizeNovelLine(sel.toString());
+      if (!partial) return null;
+      var indent = false;
+      try {
+        var pre = document.createRange();
+        pre.selectNodeContents(hit[0].el);
+        pre.setEnd(range.startContainer, range.startOffset);
+        if (!normalizeNovelLine(pre.toString())) indent = hit[0].indent;
+      } catch (err) {}
+      return (indent ? "　" : "") + partial;
+    }
+
+    var blocks = hit.map(function (h) {
+      if (h.kind === "h2") return { kind: "h2", text: h.text };
+      return { kind: "p", text: h.text, indent: h.indent };
+    });
+    return novelBlocksToPlain(blocks);
+  }
+
+  document.addEventListener("copy", function (e) {
+    try {
+      var plain = getNovelPlainFromSelection();
+      if (plain == null || plain === "") return;
+      e.preventDefault();
+      if (e.clipboardData) {
+        e.clipboardData.setData("text/plain", plain);
+        // 簡易 HTML（段落・空行を保つ）
+        var html = plain
+          .split("\n")
+          .map(function (line) {
+            if (line === "") return "<p><br></p>";
+            return "<p>" + line
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;") + "</p>";
+          })
+          .join("");
+        e.clipboardData.setData("text/html", html);
+      } else if (window.clipboardData) {
+        window.clipboardData.setData("Text", plain);
+      }
+    } catch (err) {
+      // 失敗時はブラウザ標準のコピーに任せる
+    }
+  });
+
   /* ===== 管理: ログイン（Firebase Authentication） ===== */
   function openLoginModal() {
     var overlay = document.createElement("div");
