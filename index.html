@@ -185,6 +185,22 @@ main { max-width: var(--max-width); margin: 0 auto; padding: 40px 24px 100px; }
 .work-desc { font-size: 13.5px; color: var(--fg-dim); line-height: 1.95; letter-spacing: 0.03em; margin: 0 0 22px; text-indent: 0; }
 .work-link { font-family: var(--font-mono); font-size: 11px; color: var(--accent); letter-spacing: 0.16em; border-bottom: 1px dotted var(--accent-soft); padding-bottom: 1px; display: inline-block; }
 .work-card:hover .work-link { color: var(--fg); border-bottom-color: var(--fg-dim); }
+.work-card-footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 4px;
+}
+.work-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-dim);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  margin-left: auto;
+  opacity: 0.85;
+}
 
 footer {
   max-width: var(--max-width); margin: 0 auto; padding: 40px 24px 80px; text-align: center;
@@ -1296,6 +1312,33 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
   }
 
 
+  /** 本文HTMLから文字数を数える（タグ・空白除外） */
+  function countWorkChars(content) {
+    var text = String(content == null ? "" : content)
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#(\d+);/g, function (_, n) {
+        try { return String.fromCharCode(Number(n)); } catch (e) { return ""; }
+      })
+      .replace(/\s+/g, "");
+    return text.length;
+  }
+
+  /** 「12,345文字/25分」形式。読了目安は約500字/分 */
+  function formatWorkReadingMeta(content) {
+    var n = countWorkChars(content);
+    if (n <= 0) return "0文字/0分";
+    var mins = Math.max(1, Math.ceil(n / 500));
+    var num = (typeof n.toLocaleString === "function") ? n.toLocaleString("ja-JP") : String(n);
+    return num + "文字/" + mins + "分";
+  }
+
   function formatContent(s) {
     if (s == null || s === "") return "";
     if (looksLikeHtml(s) && (s.indexOf("class=\"section\"") >= 0 || s.indexOf("<p") >= 0 || s.indexOf("id=\"toc\"") >= 0)) {
@@ -1748,7 +1791,10 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       html += '<h2 class="work-title">' + esc(w.title) + '</h2>';
       html += '<p class="work-subtitle">' + esc(w.subtitle) + '</p>';
       html += '<p class="work-desc">' + formatShort(w.desc) + '</p>';
+      html += '<div class="work-card-footer">';
       html += '<span class="work-link">読む →</span>';
+      html += '<span class="work-meta">' + esc(formatWorkReadingMeta(w.content)) + '</span>';
+      html += '</div>';
       html += '</div>';
     });
     html += '</div></main>';
