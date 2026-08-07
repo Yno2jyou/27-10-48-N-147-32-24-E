@@ -248,6 +248,16 @@ nav.work-nav a { margin: 0 10px; border-bottom: 1px dotted var(--accent); }
 main p { margin: 0 0 1.4em; text-indent: 1em; }
 main p.no-indent { text-indent: 0; }
 
+/* 閲覧モードの本文幅を編集モード（.chapter-edit-body の横 padding: 6px）に合わせる
+   → 折り返し位置を一字ズレなく同一にする */
+main#honbun:not(.is-editing) .section > p,
+main#honbun:not(.is-editing) .section > hr,
+main#honbun:not(.is-editing) .section > hr.scene-break,
+main#honbun:not(.is-editing) .section > .scene-break {
+  margin-left: 6px;
+  margin-right: 6px;
+}
+
 /* 場面区切り（コピペ時の空行 → 区切り線） */
 hr.scene-break,
 .scene-break {
