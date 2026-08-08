@@ -741,6 +741,20 @@ a[data-secret-guide], button[data-secret-guide] {
 .work-card-secret-btn { top: 14px; right: 72px; color: #8a7a9a; border-color: rgba(138,122,154,0.5); }
 .work-card-secret-btn:hover { background: rgba(138,122,154,0.16); color: #c4b4d4; border-color: rgba(138,122,154,0.75); }
 .work-card-secret-btn.is-secret { color: #c4a0d4; border-color: rgba(180,140,200,0.55); background: rgba(138,122,154,0.12); }
+.work-card-order {
+  position: absolute; top: 14px; left: 14px; z-index: 2;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.work-card-order-btn {
+  font-family: var(--font-mono); font-size: 12px;
+  letter-spacing: 0; color: var(--accent); border: 1px solid var(--accent-soft);
+  border-radius: 50%; width: 28px; height: 28px; padding: 0;
+  background: rgba(6,5,8,0.75); cursor: pointer; transition: all 0.2s ease;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+}
+.work-card-order-btn:hover:not(:disabled) { background: rgba(154,139,122,0.16); color: var(--fg); border-color: var(--accent); }
+.work-card-order-btn:disabled { opacity: 0.3; cursor: default; }
+.work-card.has-order-controls { padding-left: 52px; }
 .work-card.is-unpublished { opacity: 0.72; }
 .work-card.is-unpublished .work-title::after {
   content: " 非公開";
@@ -1700,6 +1714,30 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     await deleteDoc(doc(db, "site_works", id));
   }
 
+  /** 作品の表示順を入れ替え（dir: -1=上へ, +1=下へ） */
+  async function moveWorkOrder(id, dir) {
+    if (!cache || !cache.works || !cache.works.length) return;
+    var works = cache.works.slice().sort(function (a, b) {
+      return (a.order || 0) - (b.order || 0);
+    });
+    var idx = -1;
+    for (var i = 0; i < works.length; i++) {
+      if (works[i].id === id) { idx = i; break; }
+    }
+    var j = idx + Number(dir);
+    if (idx < 0 || j < 0 || j >= works.length) return;
+    var tmp = works[idx];
+    works[idx] = works[j];
+    works[j] = tmp;
+    var batch = writeBatch(db);
+    works.forEach(function (w, i) {
+      w.order = i;
+      batch.update(doc(db, "site_works", w.id), { order: i });
+    });
+    await batch.commit();
+    cache.works = works;
+  }
+
   function applyTheme(theme) {
     var root = document.documentElement.style;
     root.setProperty("--bg", theme.bg);
@@ -1856,14 +1894,19 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     }
     html += '<div class="works">';
     var listWorks = data.works.filter(function (w) { return isWorkVisible(w); });
-    listWorks.forEach(function (w) {
+    listWorks.forEach(function (w, wi) {
       var isPub = w.published !== false;
       var cardClass = "work-card";
       if (isManaging() && !isPub) cardClass += " is-unpublished";
       if (isManaging() && w.secret) cardClass += " is-secret-flag";
       if (w.secret && isSecretUnlocked() && !isManaging()) cardClass += " is-secret-unlocked";
+      if (isManaging()) cardClass += " has-order-controls";
       html += '<div class="' + cardClass + '" data-route="#/work/' + encodeURIComponent(w.id) + '">';
       if (isManaging()) {
+        html += '<div class="work-card-order">';
+        html += '<button type="button" class="work-card-order-btn" data-action="move-work" data-dir="-1" data-id="' + esc(w.id) + '"' + (wi === 0 ? " disabled" : "") + ' title="上へ移動" aria-label="上へ移動">↑</button>';
+        html += '<button type="button" class="work-card-order-btn" data-action="move-work" data-dir="1" data-id="' + esc(w.id) + '"' + (wi === listWorks.length - 1 ? " disabled" : "") + ' title="下へ移動" aria-label="下へ移動">↓</button>';
+        html += '</div>';
         html += '<button class="work-card-admin-btn" data-action="edit-work" data-id="' + esc(w.id) + '">編集</button>';
         if (w.secret) {
           html += '<button class="work-card-admin-btn work-card-secret-btn is-secret" data-action="toggle-secret" data-id="' + esc(w.id) + '" data-secret="1">解除</button>';
@@ -1894,7 +1937,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     if (isManaging()) attachHomeAdminHandlers(data);
     app.querySelectorAll(".work-card").forEach(function (card) {
       card.addEventListener("click", function (e) {
-        if (e.target.closest(".work-card-admin-btn")) return;
+        if (e.target.closest(".work-card-admin-btn, .work-card-order-btn, .work-card-order")) return;
         location.hash = card.getAttribute("data-route");
       });
     });
@@ -3109,6 +3152,26 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
         if (!window.confirm("作品「" + title + "」を削除しますか？\nこの操作は取り消せません。")) return;
         deleteWork(id).then(function () { return refresh(); }).catch(function (err) {
           alert("削除に失敗しました: " + (err && err.message ? err.message : err));
+        });
+      });
+    });
+
+    app.querySelectorAll('[data-action="move-work"]').forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (btn.disabled) return;
+        var id = btn.getAttribute("data-id");
+        var dir = Number(btn.getAttribute("data-dir"));
+        var allBtns = app.querySelectorAll('[data-action="move-work"]');
+        allBtns.forEach(function (b) { b.disabled = true; });
+        moveWorkOrder(id, dir).then(function () {
+          renderHome(cache);
+          updateFab();
+          showSaveToast("順番を変更しました");
+        }).catch(function (err) {
+          allBtns.forEach(function (b) { b.disabled = false; });
+          alert("順番の変更に失敗しました: " + (err && err.message ? err.message : err));
         });
       });
     });
