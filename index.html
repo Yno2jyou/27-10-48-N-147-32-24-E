@@ -253,17 +253,14 @@ nav.work-nav a { margin: 0 10px; border-bottom: 1px dotted var(--accent); }
 main p { margin: 0 0 1.4em; text-indent: 1em; }
 main p.no-indent { text-indent: 0; }
 
-/* 閲覧モードの本文幅を編集モード（.chapter-edit-body の横 padding: 6px）に合わせる
-   → 段落 margin ではなく .section の padding で揃え、1行あたりの文字数を同一にする */
-main#honbun:not(.is-editing) .section {
-  padding-left: 6px;
-  padding-right: 6px;
-  box-sizing: border-box;
-}
-main#honbun:not(.is-editing) .afterword-section .afterword-content {
-  padding-left: 6px;
-  padding-right: 6px;
-  box-sizing: border-box;
+/* 閲覧・編集の本文幅を統一（どちらも main の横 padding のみで幅を決める）
+   → モバイルでも1行あたりの文字数・折り返し位置を同一にする */
+main#honbun:not(.is-editing) .section > p,
+main#honbun:not(.is-editing) .section > hr,
+main#honbun:not(.is-editing) .section > hr.scene-break,
+main#honbun:not(.is-editing) .section > .scene-break {
+  margin-left: 0;
+  margin-right: 0;
 }
 
 /* 場面区切り（コピペ時の空行 → 区切り線） */
@@ -322,13 +319,17 @@ main#honbun.is-editing .scene-break {
     line-height: 1.7;
     padding: 0 8px 12px;
   }
-  /* 閲覧・編集で本文の字間・行間・サイズを完全一致 */
+  /* 閲覧・編集で本文の字間・行間・サイズ・幅を完全一致 */
   main#honbun:not(.is-editing) .section > p,
   main#honbun.is-editing .chapter-edit-body,
   main#honbun.is-editing .chapter-edit-body > p {
     font-size: 14px;
     line-height: 1.85;
     letter-spacing: 0.03em;
+  }
+  main#honbun.is-editing .chapter-edit-body {
+    padding-left: 0;
+    padding-right: 0;
   }
   main#honbun.is-editing .chapter-edit-body > p { margin: 0 0 1.2em; }
 }
@@ -886,10 +887,14 @@ main#honbun.is-editing .chapter-edit-title.is-jump-target {
 main#honbun.is-editing .chapter-edit-body {
   outline: none;
   min-height: 2.5em;
-  padding: 4px 6px 12px;
+  /* 左右 0：閲覧モード（main の横 padding のみ）と折り返しを一致 */
+  padding: 4px 0 12px;
+  margin: 0;
+  border: 0;
   border-radius: 2px;
   box-sizing: border-box;
-  /* 閲覧と同じ折り返しになるようフォント関連を明示 */
+  width: 100%;
+  max-width: 100%;
   font-size: inherit;
   line-height: inherit;
   letter-spacing: inherit;
@@ -902,10 +907,14 @@ main#honbun.is-editing .chapter-edit-body:focus {
   box-shadow: inset 0 0 0 1px rgba(154,139,122,0.35);
 }
 main#honbun.is-editing .chapter-edit-body > p {
-  margin: 0 0 1.4em; text-indent: 1em;
+  margin: 0 0 1.4em;
+  text-indent: 1em;
   font-size: inherit;
   line-height: inherit;
   letter-spacing: inherit;
+  /* contenteditable 内でも閲覧と同じボックス計算 */
+  box-sizing: border-box;
+  max-width: 100%;
 }
 main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
 @media (max-width: 520px) {
