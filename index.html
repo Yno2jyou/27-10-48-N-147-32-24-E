@@ -32,6 +32,11 @@ html {
   overflow-x: hidden;
   width: 100%;
   max-width: 100%;
+  /* モバイルブラウザの自動文字サイズ調整(フォントブースティング)を無効化。
+     これが原因で、閲覧モード(複数の<p>)と編集モード(単一のcontenteditable)で
+     同じfont-size指定でも実際の描画サイズがずれ、一行あたりの文字数が変わってしまう。 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 html, body { background: var(--bg); color: var(--fg); }
 
