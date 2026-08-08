@@ -253,8 +253,8 @@ nav.work-nav a { margin: 0 10px; border-bottom: 1px dotted var(--accent); }
 main p { margin: 0 0 1.4em; text-indent: 1em; }
 main p.no-indent { text-indent: 0; }
 
-/* 閲覧・編集の本文幅を統一（どちらも main の横 padding のみで幅を決める）
-   → モバイルでも1行あたりの文字数・折り返し位置を同一にする */
+/* 閲覧・編集の本文幅を統一（main の横 padding のみ）
+   iOS Chrome の contenteditable でも折り返しが一致するようにする */
 main#honbun:not(.is-editing) .section > p,
 main#honbun:not(.is-editing) .section > hr,
 main#honbun:not(.is-editing) .section > hr.scene-break,
@@ -319,19 +319,49 @@ main#honbun.is-editing .scene-break {
     line-height: 1.7;
     padding: 0 8px 12px;
   }
-  /* 閲覧・編集で本文の字間・行間・サイズ・幅を完全一致 */
+  /*
+   * 閲覧・編集の本文を完全同一にする（iOS Chrome / Safari 対策）
+   * contenteditable でも静的 p と同じメトリクスになるよう !important で固定
+   */
   main#honbun:not(.is-editing) .section > p,
   main#honbun.is-editing .chapter-edit-body,
   main#honbun.is-editing .chapter-edit-body > p {
-    font-size: 14px;
-    line-height: 1.85;
-    letter-spacing: 0.03em;
+    font-family: var(--font-body) !important;
+    font-size: 14px !important;
+    line-height: 1.85 !important;
+    letter-spacing: 0.03em !important;
+    word-break: normal !important;
+    line-break: auto !important;
+    overflow-wrap: break-word !important;
+    -webkit-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
   }
   main#honbun.is-editing .chapter-edit-body {
-    padding-left: 0;
-    padding-right: 0;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
-  main#honbun.is-editing .chapter-edit-body > p { margin: 0 0 1.2em; }
+  main#honbun.is-editing .chapter-edit-body > p {
+    margin-top: 0 !important;
+    margin-bottom: 1.2em !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+  /* 編集枠の inset shadow は幅に影響しないが、モバイルでは外して視覚差をなくす */
+  main#honbun.is-editing {
+    box-shadow: none !important;
+  }
+  main#honbun.is-editing .chapter-edit-body:focus {
+    box-shadow: none !important;
+  }
 }
 
 /* ---------- Site menu (三点リーダー + サイドバー) ---------- */
@@ -848,6 +878,7 @@ main#honbun.is-editing {
   width: 100%;
   margin-left: auto;
   margin-right: auto;
+  /* padding は main 共通ルールのまま（上書きしない） */
   box-sizing: border-box;
   overflow-x: hidden;
 }
@@ -887,7 +918,7 @@ main#honbun.is-editing .chapter-edit-title.is-jump-target {
 main#honbun.is-editing .chapter-edit-body {
   outline: none;
   min-height: 2.5em;
-  /* 左右 0：閲覧モード（main の横 padding のみ）と折り返しを一致 */
+  /* 左右 0：閲覧と同じ（main の横 padding のみ） */
   padding: 4px 0 12px;
   margin: 0;
   border: 0;
@@ -895,26 +926,37 @@ main#honbun.is-editing .chapter-edit-body {
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
+  font-family: var(--font-body);
   font-size: inherit;
   line-height: inherit;
   letter-spacing: inherit;
   word-break: normal;
+  line-break: auto;
   overflow-wrap: break-word;
+  white-space: normal;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  -webkit-nbsp-mode: space;
 }
 main#honbun.is-editing .chapter-edit-body:focus {
+  /* inset でもレイアウト幅は不変だが、モバイルでは枠を弱めて視覚差を減らす */
   box-shadow: inset 0 0 0 1px rgba(154,139,122,0.35);
 }
 main#honbun.is-editing .chapter-edit-body > p {
   margin: 0 0 1.4em;
   text-indent: 1em;
+  font-family: inherit;
   font-size: inherit;
   line-height: inherit;
   letter-spacing: inherit;
-  /* contenteditable 内でも閲覧と同じボックス計算 */
+  word-break: normal;
+  line-break: auto;
+  overflow-wrap: break-word;
   box-sizing: border-box;
   max-width: 100%;
+  /* iOS が contenteditable 内 p に付ける余白を打ち消す */
+  padding-left: 0;
+  padding-right: 0;
 }
 main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
 @media (max-width: 520px) {
