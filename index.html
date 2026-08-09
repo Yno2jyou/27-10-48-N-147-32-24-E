@@ -254,11 +254,9 @@ main p { margin: 0 0 1.4em; text-indent: 1em; }
 main p.no-indent { text-indent: 0; }
 
 /* 閲覧・編集の本文幅を統一（main の横 padding のみ）
-   iOS Chrome の contenteditable でも折り返しが一致するようにする */
-main#honbun:not(.is-editing) .section > p,
-main#honbun:not(.is-editing) .section > hr,
-main#honbun:not(.is-editing) .section > hr.scene-break,
-main#honbun:not(.is-editing) .section > .scene-break {
+   iOS Chrome の contenteditable でも折り返しが一致するようにする
+   ※ 区切り線(hr.scene-break)は中央寄せのため左右 margin は触らない */
+main#honbun:not(.is-editing) .section > p {
   margin-left: 0;
   margin-right: 0;
 }
