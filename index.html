@@ -281,11 +281,31 @@ main#honbun.is-editing .scene-break {
   opacity: 1;
 }
 
-.afterword-section { max-width: var(--max-width); margin: 48px auto 0; padding: 0 0 60px; text-align: center; }
+.afterword-section {
+  max-width: var(--max-width); margin: 48px auto 0; padding: 0 0 60px; text-align: center;
+  display: none; /* 閲覧時は最終話の句点5回タップで表示 */
+}
+.afterword-section.is-revealed { display: block; }
 .afterword-toggle { display: none !important; } /* 旧データ互換：ボタンは出さない */
 .afterword-content { margin-top: 0; text-align: left; }
-.afterword-content[hidden] { display: block !important; } /* 旧 hidden でも閲覧時は表示 */
+.afterword-content[hidden] { display: block !important; } /* 解放後は hidden でも表示 */
 .aw-title { text-align: center; font-size: 15px; font-weight: normal; color: var(--fg-dim); letter-spacing: 0.2em; margin: 0 0 32px; }
+/* あとがき解放用：最終話の最後の句点 */
+.afterword-egg-dot {
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  padding: 0.15em 0.2em;
+  margin: -0.15em -0.1em;
+  border-radius: 2px;
+  transition: color 0.18s ease, text-shadow 0.18s ease, background 0.18s ease;
+}
+.afterword-egg-dot.is-egg-pulse {
+  color: var(--accent);
+  background: rgba(154,139,122,0.12);
+  text-shadow: 0 0 10px rgba(154,139,122,0.4);
+}
 .aw-epigraph { text-align: center; font-size: 13px; color: var(--fg-dim); line-height: 1.9; margin: 0 0 40px; }
 .aw-epigraph span { display: block; }
 .aw-epigraph .indent { padding-left: 1.6em; margin-top: 0.35em; }
@@ -2386,6 +2406,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       "<li><strong>キャッチコピー</strong>を <strong>5回</strong>タップ → 大雨が約30秒間降る</li>" +
       "<li>キャッチコピー5回 → 大雨のあと → キャッチコピーを <strong>3回</strong>タップ → 右上メニューに「FACTOR/TRADERへ」が出現</li>" +
       "<li>右上の三点メニューから「FACTOR/TRADERへ」をタップ → 素因数分解投資ゲームをプレイ</li>" +
+      "<li><strong>作品の最終話</strong>本文の<strong>最後の句点「。」</strong>を <strong>5回</strong>タップ → その作品の<strong>あとがき</strong>が現れる</li>" +
       "<li>サイト／タブを閉じる → 解放状態がリセットされる</li>" +
       "</ol>" +
       "</div>" +
@@ -2487,14 +2508,121 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       });
     });
 
+    // 旧トグルボタンは非表示のまま（互換のため残す）
     app.querySelectorAll(".afterword-toggle").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        var content = btn.parentElement.querySelector(".afterword-content");
-        if (!content) return;
-        var open = content.classList.toggle("is-open");
-        content.hidden = !open;
-        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        revealAfterword(true);
       });
+    });
+
+    setupAfterwordEgg();
+  }
+
+  var _afterwordEggTaps = 0;
+  var _afterwordEggLast = 0;
+
+  /** あとがきを表示（最終話の句点5回タップ、または管理編集時） */
+  function revealAfterword(scroll) {
+    var section = app.querySelector(".afterword-section");
+    if (!section) return;
+    section.classList.add("is-revealed");
+    var content = section.querySelector(".afterword-content");
+    if (content) {
+      content.hidden = false;
+      content.classList.add("is-open");
+    }
+    if (scroll) {
+      setTimeout(function () { scrollToEl(section); }, 40);
+    }
+  }
+
+  /**
+   * 最終話（.section の最後）本文の最後の「。」を5回タップするとあとがきが現れる。
+   * 編集モード中は何もしない（あとがきは章ブロックとして常時編集可）。
+   */
+  function setupAfterwordEgg() {
+    _afterwordEggTaps = 0;
+    _afterwordEggLast = 0;
+    if (document.body.classList.contains("is-editing")) return;
+
+    var main = app.querySelector("#honbun") || app.querySelector("main");
+    if (!main) return;
+    var awSection = main.querySelector(".afterword-section") || app.querySelector(".afterword-section");
+    if (!awSection) return; // あとがきが無い作品では仕掛け自体を置かない
+
+    // 本文の最終 .section（あとがき以外）
+    var sections = main.querySelectorAll(".section");
+    if (!sections.length) return;
+    var lastSec = sections[sections.length - 1];
+
+    // 既にラップ済みなら再バインドのみ
+    var existing = lastSec.querySelector(".afterword-egg-dot");
+    if (existing) {
+      bindAfterwordEggDot(existing);
+      return;
+    }
+
+    // 最後の「。」を含むテキストノードを探す
+    var walker = document.createTreeWalker(lastSec, NodeFilter.SHOW_TEXT, null);
+    var lastHit = null;
+    var node;
+    while ((node = walker.nextNode())) {
+      // 見出し内は対象外
+      var p = node.parentElement;
+      if (p && (p.closest("h2") || p.closest(".section-title") || p.closest(".afterword-section"))) continue;
+      var val = node.nodeValue || "";
+      var idx = val.lastIndexOf("。");
+      if (idx >= 0) lastHit = { node: node, index: idx };
+    }
+    if (!lastHit) return;
+
+    var textNode = lastHit.node;
+    var idx = lastHit.index;
+    var full = textNode.nodeValue;
+    var before = full.slice(0, idx);
+    var after = full.slice(idx + 1);
+    var span = document.createElement("span");
+    span.className = "afterword-egg-dot";
+    span.setAttribute("role", "button");
+    span.setAttribute("aria-label", "");
+    span.textContent = "。";
+    var parent = textNode.parentNode;
+    if (!parent) return;
+    // テキストを分割して句点だけ span に
+    if (before) parent.insertBefore(document.createTextNode(before), textNode);
+    parent.insertBefore(span, textNode);
+    if (after) parent.insertBefore(document.createTextNode(after), textNode);
+    parent.removeChild(textNode);
+
+    bindAfterwordEggDot(span);
+  }
+
+  function bindAfterwordEggDot(dot) {
+    if (!dot || dot.getAttribute("data-egg-bound") === "1") return;
+    dot.setAttribute("data-egg-bound", "1");
+    function onTap(ev) {
+      if (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+      if (document.body.classList.contains("is-editing")) return;
+      var aw = app.querySelector(".afterword-section");
+      if (aw && aw.classList.contains("is-revealed")) return;
+      var now = Date.now();
+      if (now - _afterwordEggLast > TAP_GAP) _afterwordEggTaps = 0;
+      _afterwordEggLast = now;
+      _afterwordEggTaps += 1;
+      dot.classList.add("is-egg-pulse");
+      setTimeout(function () { dot.classList.remove("is-egg-pulse"); }, 180);
+      if (_afterwordEggTaps >= 5) {
+        _afterwordEggTaps = 0;
+        revealAfterword(true);
+      }
+    }
+    dot.addEventListener("pointerup", onTap);
+    dot.addEventListener("click", function (ev) {
+      if (window.PointerEvent) return;
+      onTap(ev);
     });
   }
 
