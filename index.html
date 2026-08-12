@@ -306,6 +306,112 @@ main#honbun.is-editing .scene-break {
   background: rgba(154,139,122,0.12);
   text-shadow: 0 0 10px rgba(154,139,122,0.4);
 }
+
+/* 句読点日記エッグ */
+.diary-egg-dot {
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  padding: 0.12em 0.08em;
+  margin: -0.12em -0.04em;
+  border-radius: 2px;
+  transition: color 0.18s ease, text-shadow 0.18s ease, background 0.18s ease;
+}
+.diary-egg-dot.is-egg-pulse {
+  color: var(--accent);
+  background: rgba(154,139,122,0.14);
+  text-shadow: 0 0 8px rgba(154,139,122,0.35);
+}
+.diary-modal-overlay {
+  position: fixed; inset: 0; z-index: 960;
+  background: rgba(0,0,0,0.72);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.diary-modal-box {
+  background: #121014;
+  border: 1px solid rgba(154,139,122,0.35);
+  max-width: 420px; width: 100%;
+  padding: 32px 28px 28px;
+  border-radius: 3px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  max-height: 78vh;
+  overflow-y: auto;
+}
+.diary-modal-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: var(--fg-dim);
+  text-align: center;
+  margin-bottom: 18px;
+  text-transform: uppercase;
+}
+.diary-modal-text {
+  font-family: var(--font-body);
+  font-size: 14.5px;
+  line-height: 2.05;
+  letter-spacing: 0.04em;
+  color: var(--fg);
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.diary-modal-text p { margin: 0 0 1em; text-indent: 1em; }
+.diary-modal-text p:last-child { margin-bottom: 0; }
+.diary-modal-actions {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+}
+.diary-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 58vh;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  padding-right: 4px;
+}
+.diary-editor-item {
+  border: 1px solid var(--line);
+  background: #0c0a0c;
+  border-radius: 2px;
+  padding: 10px 12px;
+}
+.diary-editor-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--fg-dim);
+}
+.diary-editor-item textarea {
+  width: 100%;
+  min-height: 64px;
+  background: #08070a;
+  border: 1px solid var(--line);
+  color: var(--fg);
+  padding: 8px 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.75;
+  resize: vertical;
+  border-radius: 2px;
+}
+.diary-editor-item textarea:focus { outline: none; border-color: var(--accent); }
+.diary-editor-del {
+  background: none; border: 1px solid var(--line); color: var(--fg-dim);
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em;
+  padding: 4px 10px; cursor: pointer; border-radius: 2px;
+}
+.diary-editor-del:hover { color: #ef4444; border-color: #ef4444; }
+
 .aw-epigraph { text-align: center; font-size: 13px; color: var(--fg-dim); line-height: 1.9; margin: 0 0 40px; }
 .aw-epigraph span { display: block; }
 .aw-epigraph .indent { padding-left: 1.6em; margin-top: 0.35em; }
@@ -2407,6 +2513,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       "<li>キャッチコピー5回 → 大雨のあと → キャッチコピーを <strong>3回</strong>タップ → 右上メニューに「FACTOR/TRADERへ」が出現</li>" +
       "<li>右上の三点メニューから「FACTOR/TRADERへ」をタップ → 素因数分解投資ゲームをプレイ</li>" +
       "<li><strong>作品の最終話</strong>本文の<strong>最後の句点「。」</strong>を <strong>5回</strong>タップ → その作品の<strong>あとがき</strong>が現れる</li>" +
+      "<li>本文中の<strong>句読点（。、）</strong>のうちランダムな約100箇所を <strong>3回</strong>タップ → <strong>短い日記</strong>が表示される（位置は表示のたびに変わる）</li>" +
       "<li>サイト／タブを閉じる → 解放状態がリセットされる</li>" +
       "</ol>" +
       "</div>" +
@@ -2458,7 +2565,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     html += '<footer><p>&copy; 2026 ' + esc(work.title) + '</p></footer>';
     app.innerHTML = html;
 
-    attachWorkInteractions();
+    attachWorkInteractions(work);
     app.querySelectorAll("[data-secret-guide]").forEach(function (el) {
       el.addEventListener("click", function (e) {
         e.preventDefault();
@@ -2487,7 +2594,473 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     } else { scrolling = false; }
   }
 
-  function attachWorkInteractions() {
+
+  /* ===== 句読点日記（閲覧時：ランダムな句読点を複数回タップ） ===== */
+  var DIARY_EGG_TAPS_NEEDED = 3;
+  var DIARY_EGG_MAX = 100;
+  var DIARY_PUNCT_RE = /[。、．，]/;
+  var DEFAULT_DIARIES = [
+    "雨の音が止むと、部屋の静けさが急に大きくなった。",
+    "電車の窓に自分の顔が映る。誰かと似ている気がして、しばらく見ていた。",
+    "コンビニの明かりだけが、夜道で必要以上に明るい。",
+    "電話の着信履歴を消した。理由はうまく説明できない。",
+    "コーヒーが冷めるまで、何も決められなかった。",
+    "本のページの端が折れている。昔の自分が残した印だ。",
+    "駅のホームで、知らない人の笑い声が遠くなった。",
+    "鍵を閉めた音が、今日いちばんはっきりしていた。",
+    "夢の続きを覚えていない。覚えていないことだけ覚えている。",
+    "シャツの袖口に、インクの染みが残っていた。",
+    "時計を見ないようにしていたら、かえって時間が気になった。",
+    "誰かの名前を呼ぼうとして、途中でやめた。",
+    "風が強い日は、考えが途中で飛ばされる。",
+    "冷蔵庫の中の賞味期限を、また一日伸ばした。",
+    "空が低い。触れるほどではないが、近い。",
+    "メモ用紙に書いた文字が、自分のものに見えなかった。",
+    "歩きながら、昨日の会話の終わりだけを繰り返す。",
+    "窓の結露に指で線を引いた。すぐに消えた。",
+    "引き出しの奥から、古い切符が出てきた。",
+    "湯気の向こうで、誰かが笑っている気がした。",
+    "数字ばかり並んだ画面を閉じて、天井を見た。",
+    "夜中に目が覚めて、自分の呼吸を確認した。",
+    "靴紐を結び直す時間が、妙に長かった。",
+    "届かないメールの下書きが、下書きのまま残っている。",
+    "街灯の下だけ、路面が濡れて見えた。",
+    "本を閉じてからも、物語の温度が手に残る。",
+    "約束の時間より少し早く着いて、少し後悔した。",
+    "ゴミ箱に捨てた紙を、もう一度見ようとしてやめた。",
+    "白い壁に、時計の針の影が動いている。",
+    "誰かが置いていった傘が、まだ濡れていた。",
+    "朝の光が、机の埃を浮かび上がらせる。",
+    "同じ曲を三回聴いて、四回目で止めた。",
+    "財布の中の写真が、折れたまま入っている。",
+    "階段を一段飛ばして、すぐ戻した。",
+    "言葉にしようとして、喉の奥で止まった。",
+    "白い息が、夜の空気にすぐ溶ける。",
+    "机の角に、古いシールの跡が残っている。",
+    "隣の部屋の物音が、急に静かになった。",
+    "カレンダーの日付を、指でなぞっただけだった。",
+    "ペンのインクが切れて、最後の線が薄くなった。",
+    "電車が遅延して、世界が少しだけ止まった。",
+    "鏡の中の自分が、先に目を逸らした。",
+    "手紙の宛名だけ書いて、本文は白紙のまま。",
+    "遠い雷が、窓を一度だけ光らせた。",
+    "ポケットの中の小銭が、歩くたびに鳴る。",
+    "今夜は早く寝ようと思って、結局起きている。",
+    "花瓶の水を替えていないことに気づいた。",
+    "名前を呼ばれた気がして振り返ると、誰もいなかった。",
+    "古いノートの余白に、意味のない線がある。",
+    "信号が青になる前に、渡りたかった。",
+    "写真の日付が、思っていたより古かった。",
+    "湯船に沈んで、耳の中だけ海になった。",
+    "会話の途中で、話題が消えてしまった。",
+    "カーテンの隙間から、夜の青が入ってくる。",
+    "明日の予定を消して、空白を残した。",
+    "靴のサイズが、いつものより少し大きい気がした。",
+    "星は見えないが、空は確かにそこにある。",
+    "付箋の色だけが、机の上で目立っている。",
+    "電話の保留音が、妙に長かった。",
+    "紙の端を指で擦ると、小さな痛みがある。",
+    "誰かの足音が近づいて、通り過ぎた。",
+    "紅茶の茶葉が、カップの底で沈んでいる。",
+    "記憶の順番が、少し入れ替わっている。",
+    "ドアノブが冷たくて、冬だと気づいた。",
+    "画面の明るさを下げて、部屋が暗くなった。",
+    "昔のメールを開いて、すぐに閉じた。",
+    "雨上がりの匂いが、街の隙間に残っている。",
+    "言葉を選んでいるうちに、タイミングを逃した。",
+    "枕の感触が、昨夜と少し違う。",
+    "引き出しを開けて、何を探していたか忘れた。",
+    "遠くの犬の声が、二回だけ聞こえた。",
+    "ノートの罫線が、文字より先に目に入る。",
+    "温かい缶コーヒーが、すぐに冷えた。",
+    "名前のない感情が、胸の奥で動かない。",
+    "窓を閉めても、風の音は残っている。",
+    "日付が変わったのに、一日が終わっていない。",
+    "指先のインクを、ティッシュで拭った。",
+    "静かな部屋ほど、小さな音が大きい。",
+    "約束を守ったことより、破ったことを思い出す。",
+    "青いペンで書いた文字が、少し滲んでいる。",
+    "朝の電車は、誰も目を合わせない。",
+    "本棚の隙間に、埃が溜まっていた。",
+    "短い夢から覚めて、長い余韻だけが残る。",
+    "封筒を開けずに、机の端に置いた。",
+    "夜更けの水道の音が、妙に澄んでいる。",
+    "時計の秒針だけが、仕事をしている。",
+    "言葉の温度を測るように、もう一度読み直す。",
+    "古いコートのポケットから、切符が出た。",
+    "空の色が、今日の気分に似ている。",
+    "誰かに話したくなる話を、誰にも話さない。",
+    "ページの角が丸くなっている。何度も開いた痕。",
+    "部屋の電気を消すと、外の光が強くなった。",
+    "同じ場所に立って、違うことを考えている。",
+    "指でなぞった文字が、跡にならない。",
+    "遠い花火の音が、遅れて届いた。",
+    "今日という日に、名前をつけてみた。",
+    "沈黙が続きすぎて、沈黙が話題になった。",
+    "窓ガラスに、自分の吐息が白く残る。",
+    "終わった話なのに、続きがある気がする。",
+    "最後の一文を書いて、ペンを置いた。"
+  ];
+
+  function normalizeDiaries(list) {
+    var out = [];
+    if (!Array.isArray(list)) list = [];
+    list.forEach(function (item, i) {
+      if (item == null) return;
+      if (typeof item === "string") {
+        var t = String(item).trim();
+        if (t) out.push({ id: "d" + i, text: t });
+        return;
+      }
+      var text = String(item.text != null ? item.text : "").trim();
+      if (!text) return;
+      out.push({
+        id: String(item.id || ("d" + i)),
+        text: text
+      });
+    });
+    return out;
+  }
+
+  function getWorkDiaries(work) {
+    if (work && Array.isArray(work.diaries) && work.diaries.length) {
+      return normalizeDiaries(work.diaries);
+    }
+    // 未設定時はデフォルト短文を id 付きで返す（保存前の閲覧用）
+    return DEFAULT_DIARIES.map(function (t, i) {
+      return { id: "d" + i, text: t };
+    });
+  }
+
+  function shuffleInPlace(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = arr[i];
+      arr[i] = arr[j];
+      arr[j] = tmp;
+    }
+    return arr;
+  }
+
+  function openDiaryModal(text) {
+    var existing = document.querySelector(".diary-modal-overlay");
+    if (existing) existing.remove();
+    var overlay = document.createElement("div");
+    overlay.className = "diary-modal-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    var box = document.createElement("div");
+    box.className = "diary-modal-box";
+    var label = document.createElement("div");
+    label.className = "diary-modal-label";
+    label.textContent = "日記";
+    var body = document.createElement("div");
+    body.className = "diary-modal-text";
+    // 改行を段落に
+    var parts = String(text || "").replace(/\r\n/g, "\n").split(/\n+/).map(function (s) {
+      return s.trim();
+    }).filter(Boolean);
+    if (!parts.length) parts = ["（空の日記）"];
+    parts.forEach(function (p) {
+      var el = document.createElement("p");
+      el.textContent = p;
+      body.appendChild(el);
+    });
+    var actions = document.createElement("div");
+    actions.className = "diary-modal-actions";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn primary";
+    btn.textContent = "閉じる";
+    actions.appendChild(btn);
+    box.appendChild(label);
+    box.appendChild(body);
+    box.appendChild(actions);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    function close() {
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }
+    btn.addEventListener("click", close);
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) close();
+    });
+    document.addEventListener("keydown", function onKey(e) {
+      if (e.key === "Escape") {
+        document.removeEventListener("keydown", onKey);
+        close();
+      }
+    });
+  }
+
+  /**
+   * 本文中の句読点から最大 DIARY_EGG_MAX 箇所をランダム抽選し、日記を割り当てる。
+   * 位置は表示のたびに変わる。あとがき用の句点は除外。
+   */
+  function setupDiaryEggs(work) {
+    if (document.body.classList.contains("is-editing")) return;
+    var main = app.querySelector("#honbun");
+    if (!main) return;
+    var diaries = getWorkDiaries(work);
+    if (!diaries.length) return;
+
+    // 既存ラップを解除（再入場時）
+    main.querySelectorAll(".diary-egg-dot").forEach(function (span) {
+      var t = document.createTextNode(span.textContent || "");
+      if (span.parentNode) span.parentNode.replaceChild(t, span);
+    });
+
+    var candidates = [];
+    var walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT, null);
+    var node;
+    while ((node = walker.nextNode())) {
+      var parent = node.parentElement;
+      if (!parent) continue;
+      if (parent.closest("h2, .section-title, .afterword-section, .afterword-egg-dot, .diary-egg-dot, #toc, nav")) continue;
+      if (parent.closest(".chapter-edit-title, .chapter-edit-body")) continue;
+      var val = node.nodeValue || "";
+      for (var i = 0; i < val.length; i++) {
+        if (DIARY_PUNCT_RE.test(val.charAt(i))) {
+          candidates.push({ node: node, index: i, ch: val.charAt(i) });
+        }
+      }
+    }
+    if (!candidates.length) return;
+
+    // 最終話の最後の「。」はあとがきエッグ用に予約（候補から除外）
+    var sections = main.querySelectorAll(".section");
+    if (sections.length) {
+      var lastSec = sections[sections.length - 1];
+      var lastPeriod = null;
+      for (var c = candidates.length - 1; c >= 0; c--) {
+        var cand = candidates[c];
+        if (cand.ch === "。" && lastSec.contains(cand.node)) {
+          lastPeriod = cand;
+          break;
+        }
+      }
+      if (lastPeriod) {
+        candidates = candidates.filter(function (c) {
+          return !(c.node === lastPeriod.node && c.index === lastPeriod.index);
+        });
+      }
+    }
+
+    shuffleInPlace(candidates);
+    var n = Math.min(DIARY_EGG_MAX, candidates.length, diaries.length);
+    var picked = candidates.slice(0, n);
+
+    var diaryPool = diaries.slice();
+    shuffleInPlace(diaryPool);
+
+    // 同一テキストノードごとに index 降順でまとめて置換（ノード分割の不整合を防ぐ）
+    var byNode = [];
+    var nodeMap = new Map();
+    picked.forEach(function (hit, hi) {
+      var key = hit.node;
+      if (!nodeMap.has(key)) {
+        var bucket = { node: hit.node, hits: [] };
+        nodeMap.set(key, bucket);
+        byNode.push(bucket);
+      }
+      nodeMap.get(key).hits.push({ index: hit.index, ch: hit.ch, diaryIdx: hi });
+    });
+
+    byNode.forEach(function (bucket) {
+      var textNode = bucket.node;
+      if (!textNode || !textNode.parentNode) return;
+      var hits = bucket.hits.slice().sort(function (a, b) { return b.index - a.index; });
+      // 重複 index を除去
+      var seen = {};
+      hits = hits.filter(function (h) {
+        if (seen[h.index]) return false;
+        seen[h.index] = true;
+        return true;
+      });
+      hits.forEach(function (hit) {
+        if (!textNode || !textNode.parentNode) return;
+        var full = textNode.nodeValue || "";
+        if (hit.index < 0 || hit.index >= full.length) return;
+        if (full.charAt(hit.index) !== hit.ch) return;
+        var before = full.slice(0, hit.index);
+        var after = full.slice(hit.index + 1);
+        var diary = diaryPool[hit.diaryIdx % diaryPool.length];
+        var span = document.createElement("span");
+        span.className = "diary-egg-dot";
+        span.setAttribute("data-diary-id", diary.id);
+        span.setAttribute("data-diary-text", diary.text);
+        span.setAttribute("role", "button");
+        span.setAttribute("tabindex", "0");
+        span.textContent = hit.ch;
+        var parent = textNode.parentNode;
+        var afterNode = null;
+        if (before) parent.insertBefore(document.createTextNode(before), textNode);
+        parent.insertBefore(span, textNode);
+        if (after) {
+          afterNode = document.createTextNode(after);
+          parent.insertBefore(afterNode, textNode);
+        }
+        parent.removeChild(textNode);
+        bindDiaryEggDot(span);
+        // 同一ノード内でより手前の句読点は「before」側に残るため、次は before を対象にする
+        // index 降順なので after 側には未処理の句読点は無い。before を次の textNode に。
+        textNode = before ? span.previousSibling : null;
+        if (textNode && textNode.nodeType !== 3) textNode = null;
+      });
+    });
+  }
+
+  function bindDiaryEggDot(dot) {
+    if (!dot || dot.getAttribute("data-egg-bound") === "1") return;
+    dot.setAttribute("data-egg-bound", "1");
+    var taps = 0;
+    var last = 0;
+    function onTap(ev) {
+      if (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+      if (document.body.classList.contains("is-editing")) return;
+      var now = Date.now();
+      if (now - last > TAP_GAP) taps = 0;
+      last = now;
+      taps += 1;
+      dot.classList.add("is-egg-pulse");
+      setTimeout(function () { dot.classList.remove("is-egg-pulse"); }, 180);
+      if (taps >= DIARY_EGG_TAPS_NEEDED) {
+        taps = 0;
+        var t = dot.getAttribute("data-diary-text") || "";
+        openDiaryModal(t);
+      }
+    }
+    dot.addEventListener("pointerup", onTap);
+    dot.addEventListener("click", function (ev) {
+      if (window.PointerEvent) return;
+      onTap(ev);
+    });
+    dot.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" || ev.key === " ") {
+        onTap(ev);
+      }
+    });
+  }
+
+  /** 編集画面：短い日記の一覧編集 */
+  function openDiaryEditorModal(work) {
+    if (!work) return;
+    var diaries = getWorkDiaries(work).map(function (d) {
+      return { id: d.id, text: d.text };
+    });
+    // 空でも編集できるよう最低1件
+    if (!diaries.length) {
+      diaries.push({ id: "d0", text: "" });
+    }
+
+    var overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    var box = document.createElement("div");
+    box.className = "modal-box";
+    box.style.maxWidth = "640px";
+    box.style.maxHeight = "88vh";
+    box.style.overflowY = "auto";
+
+    var html = "<h3>短い日記の編集</h3>";
+    html += '<p style="font-size:12px;color:var(--fg-dim);line-height:1.7;margin:0 0 14px;letter-spacing:0.04em;">閲覧時、本文中の句読点（。、など）から最大100箇所がランダムに選ばれ、3回タップで表示されます。位置は表示のたびに変わります。</p>';
+    html += '<div class="diary-editor-list" data-diary-list></div>';
+    html += '<div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">';
+    html += '<button type="button" class="btn" data-add-diary>+ 追加</button>';
+    html += '<span style="flex:1"></span>';
+    html += '<button type="button" class="btn" data-close>キャンセル</button>';
+    html += '<button type="button" class="btn primary" data-save>保存</button>';
+    html += "</div>";
+    box.innerHTML = html;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    var listEl = box.querySelector("[data-diary-list]");
+
+    function renumber() {
+      Array.prototype.forEach.call(listEl.querySelectorAll(".diary-editor-item"), function (row, i) {
+        var lab = row.querySelector("[data-idx]");
+        if (lab) lab.textContent = "日記 " + (i + 1);
+      });
+    }
+
+    function addRow(item) {
+      item = item || { id: "d" + Date.now() + "_" + Math.floor(Math.random() * 999), text: "" };
+      var row = document.createElement("div");
+      row.className = "diary-editor-item";
+      row.setAttribute("data-id", item.id);
+      row.innerHTML =
+        '<div class="diary-editor-item-head">' +
+        '<span data-idx></span>' +
+        '<button type="button" class="diary-editor-del" data-del>削除</button>' +
+        "</div>" +
+        '<textarea rows="3" spellcheck="false"></textarea>';
+      row.querySelector("textarea").value = item.text || "";
+      row.querySelector("[data-del]").addEventListener("click", function () {
+        if (listEl.querySelectorAll(".diary-editor-item").length <= 1) {
+          row.querySelector("textarea").value = "";
+          return;
+        }
+        row.remove();
+        renumber();
+      });
+      listEl.appendChild(row);
+      renumber();
+    }
+
+    diaries.forEach(function (d) { addRow(d); });
+
+    box.querySelector("[data-add-diary]").addEventListener("click", function () {
+      addRow({ id: "d" + Date.now(), text: "" });
+      var rows = listEl.querySelectorAll(".diary-editor-item");
+      var last = rows[rows.length - 1];
+      if (last) {
+        last.scrollIntoView({ block: "nearest" });
+        var ta = last.querySelector("textarea");
+        if (ta) ta.focus();
+      }
+    });
+
+    box.querySelector("[data-close]").addEventListener("click", function () { overlay.remove(); });
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) overlay.remove(); });
+
+    box.querySelector("[data-save]").addEventListener("click", async function () {
+      var saveBtn = box.querySelector("[data-save]");
+      var next = [];
+      Array.prototype.forEach.call(listEl.querySelectorAll(".diary-editor-item"), function (row, i) {
+        var t = (row.querySelector("textarea").value || "").trim();
+        if (!t) return;
+        next.push({
+          id: row.getAttribute("data-id") || ("d" + i),
+          text: t
+        });
+      });
+      saveBtn.textContent = "保存中...";
+      saveBtn.disabled = true;
+      try {
+        await saveWork(work.id, { diaries: next });
+        work.diaries = next;
+        if (cache && cache.works) {
+          var cw = cache.works.filter(function (w) { return w.id === work.id; })[0];
+          if (cw) cw.diaries = next;
+        }
+        overlay.remove();
+        showSaveToast("日記を保存しました");
+        // 閲覧DOMが残っていれば再配置
+        if (!document.body.classList.contains("is-editing")) {
+          setupDiaryEggs(work);
+        }
+      } catch (err) {
+        alert("保存に失敗しました: " + (err && err.message ? err.message : err));
+        saveBtn.textContent = "保存";
+        saveBtn.disabled = false;
+      }
+    });
+  }
+
+    function attachWorkInteractions(work) {
     app.querySelectorAll('a[href^="#"]').forEach(function (link) {
       var href = link.getAttribute("href");
       if (!href || href.length < 2 || href.charAt(1) === "/") return;
@@ -2516,6 +3089,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     });
 
     setupAfterwordEgg();
+    setupDiaryEggs(work);
   }
 
   var _afterwordEggTaps = 0;
@@ -2889,6 +3463,9 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       }
       if (isManaging()) {
         html += '<button type="button" data-action="secret-guide">隠し要素</button>';
+        if (!onHome) {
+          html += '<button type="button" data-action="edit-diaries">短い日記を編集</button>';
+        }
       }
       html += '<button type="button" data-action="logout">ログアウト</button>';
     }
@@ -3055,6 +3632,22 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
           if (window.confirm("ログアウトしますか？")) logout();
         } else if (act === "factor") {
           openFactorTraderGame();
+        } else if (act === "edit-diaries") {
+          var wid = null;
+          try {
+            var h = location.hash || "";
+            var m = h.match(/#\/work\/([^/?#]+)/);
+            if (m) wid = decodeURIComponent(m[1]);
+          } catch (err) {}
+          var w = null;
+          if (wid && cache && cache.works) {
+            w = cache.works.filter(function (x) { return x.id === wid; })[0];
+          }
+          if (!w) {
+            alert("作品ページで開いてください");
+          } else {
+            openDiaryEditorModal(w);
+          }
         }
       });
     });
@@ -3627,6 +4220,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       '<a href="#/" data-home data-edit-home>トップページへ</a>' +
       '<a href="#toc" data-edit-toc>目次</a>' +
       '<a href="#secret-guide" data-secret-guide>隠し要素</a>' +
+      '<a href="#edit-diaries" data-edit-diaries>短い日記</a>' +
       '</div>' +
       '<div class="hint">編集中 · 変更後は保存</div>' +
       '<div class="jump-wrap">' +
@@ -4088,6 +4682,13 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       openSecretGuideModal();
     });
 
+    var diaryEditLink = toolbar.querySelector("[data-edit-diaries]");
+    if (diaryEditLink) diaryEditLink.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openDiaryEditorModal(work);
+    });
+
     var saveBtn = toolbar.querySelector("[data-save]");
 
     function clearEditAttrs() {
@@ -4129,7 +4730,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
         clearEditAttrs();
         if (toolbar.parentNode) toolbar.parentNode.removeChild(toolbar);
         main.innerHTML = formatContent(html);
-        attachWorkInteractions();
+        attachWorkInteractions(work);
         enterInlineBodyEdit(work, { preserveScroll: true, scrollY: scrollY });
         showSaveToast("保存完了！");
       } catch (err) {
