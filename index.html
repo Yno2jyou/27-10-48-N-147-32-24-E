@@ -323,6 +323,32 @@ main#honbun.is-editing .scene-break {
   background: rgba(154,139,122,0.14);
   text-shadow: 0 0 8px rgba(154,139,122,0.35);
 }
+/* 編集・管理画面：選ばれた約100箇所を金色に光らせる */
+.diary-egg-dot.is-edit-mark {
+  color: #f0d060;
+  background: rgba(240, 208, 96, 0.18);
+  text-shadow:
+    0 0 4px rgba(255, 220, 100, 0.95),
+    0 0 10px rgba(240, 200, 60, 0.7),
+    0 0 18px rgba(220, 170, 40, 0.45);
+  animation: diary-gold-pulse 2.4s ease-in-out infinite;
+}
+@keyframes diary-gold-pulse {
+  0%, 100% {
+    text-shadow:
+      0 0 4px rgba(255, 220, 100, 0.85),
+      0 0 10px rgba(240, 200, 60, 0.55),
+      0 0 16px rgba(220, 170, 40, 0.35);
+    background: rgba(240, 208, 96, 0.14);
+  }
+  50% {
+    text-shadow:
+      0 0 6px rgba(255, 230, 120, 1),
+      0 0 14px rgba(255, 210, 80, 0.85),
+      0 0 24px rgba(240, 180, 40, 0.55);
+    background: rgba(240, 208, 96, 0.26);
+  }
+}
 .diary-modal-overlay {
   position: fixed; inset: 0; z-index: 960;
   background: rgba(0,0,0,0.72);
@@ -2599,108 +2625,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
   var DIARY_EGG_TAPS_NEEDED = 3;
   var DIARY_EGG_MAX = 100;
   var DIARY_PUNCT_RE = /[。、．，]/;
-  var DEFAULT_DIARIES = [
-    "雨の音が止むと、部屋の静けさが急に大きくなった。",
-    "電車の窓に自分の顔が映る。誰かと似ている気がして、しばらく見ていた。",
-    "コンビニの明かりだけが、夜道で必要以上に明るい。",
-    "電話の着信履歴を消した。理由はうまく説明できない。",
-    "コーヒーが冷めるまで、何も決められなかった。",
-    "本のページの端が折れている。昔の自分が残した印だ。",
-    "駅のホームで、知らない人の笑い声が遠くなった。",
-    "鍵を閉めた音が、今日いちばんはっきりしていた。",
-    "夢の続きを覚えていない。覚えていないことだけ覚えている。",
-    "シャツの袖口に、インクの染みが残っていた。",
-    "時計を見ないようにしていたら、かえって時間が気になった。",
-    "誰かの名前を呼ぼうとして、途中でやめた。",
-    "風が強い日は、考えが途中で飛ばされる。",
-    "冷蔵庫の中の賞味期限を、また一日伸ばした。",
-    "空が低い。触れるほどではないが、近い。",
-    "メモ用紙に書いた文字が、自分のものに見えなかった。",
-    "歩きながら、昨日の会話の終わりだけを繰り返す。",
-    "窓の結露に指で線を引いた。すぐに消えた。",
-    "引き出しの奥から、古い切符が出てきた。",
-    "湯気の向こうで、誰かが笑っている気がした。",
-    "数字ばかり並んだ画面を閉じて、天井を見た。",
-    "夜中に目が覚めて、自分の呼吸を確認した。",
-    "靴紐を結び直す時間が、妙に長かった。",
-    "届かないメールの下書きが、下書きのまま残っている。",
-    "街灯の下だけ、路面が濡れて見えた。",
-    "本を閉じてからも、物語の温度が手に残る。",
-    "約束の時間より少し早く着いて、少し後悔した。",
-    "ゴミ箱に捨てた紙を、もう一度見ようとしてやめた。",
-    "白い壁に、時計の針の影が動いている。",
-    "誰かが置いていった傘が、まだ濡れていた。",
-    "朝の光が、机の埃を浮かび上がらせる。",
-    "同じ曲を三回聴いて、四回目で止めた。",
-    "財布の中の写真が、折れたまま入っている。",
-    "階段を一段飛ばして、すぐ戻した。",
-    "言葉にしようとして、喉の奥で止まった。",
-    "白い息が、夜の空気にすぐ溶ける。",
-    "机の角に、古いシールの跡が残っている。",
-    "隣の部屋の物音が、急に静かになった。",
-    "カレンダーの日付を、指でなぞっただけだった。",
-    "ペンのインクが切れて、最後の線が薄くなった。",
-    "電車が遅延して、世界が少しだけ止まった。",
-    "鏡の中の自分が、先に目を逸らした。",
-    "手紙の宛名だけ書いて、本文は白紙のまま。",
-    "遠い雷が、窓を一度だけ光らせた。",
-    "ポケットの中の小銭が、歩くたびに鳴る。",
-    "今夜は早く寝ようと思って、結局起きている。",
-    "花瓶の水を替えていないことに気づいた。",
-    "名前を呼ばれた気がして振り返ると、誰もいなかった。",
-    "古いノートの余白に、意味のない線がある。",
-    "信号が青になる前に、渡りたかった。",
-    "写真の日付が、思っていたより古かった。",
-    "湯船に沈んで、耳の中だけ海になった。",
-    "会話の途中で、話題が消えてしまった。",
-    "カーテンの隙間から、夜の青が入ってくる。",
-    "明日の予定を消して、空白を残した。",
-    "靴のサイズが、いつものより少し大きい気がした。",
-    "星は見えないが、空は確かにそこにある。",
-    "付箋の色だけが、机の上で目立っている。",
-    "電話の保留音が、妙に長かった。",
-    "紙の端を指で擦ると、小さな痛みがある。",
-    "誰かの足音が近づいて、通り過ぎた。",
-    "紅茶の茶葉が、カップの底で沈んでいる。",
-    "記憶の順番が、少し入れ替わっている。",
-    "ドアノブが冷たくて、冬だと気づいた。",
-    "画面の明るさを下げて、部屋が暗くなった。",
-    "昔のメールを開いて、すぐに閉じた。",
-    "雨上がりの匂いが、街の隙間に残っている。",
-    "言葉を選んでいるうちに、タイミングを逃した。",
-    "枕の感触が、昨夜と少し違う。",
-    "引き出しを開けて、何を探していたか忘れた。",
-    "遠くの犬の声が、二回だけ聞こえた。",
-    "ノートの罫線が、文字より先に目に入る。",
-    "温かい缶コーヒーが、すぐに冷えた。",
-    "名前のない感情が、胸の奥で動かない。",
-    "窓を閉めても、風の音は残っている。",
-    "日付が変わったのに、一日が終わっていない。",
-    "指先のインクを、ティッシュで拭った。",
-    "静かな部屋ほど、小さな音が大きい。",
-    "約束を守ったことより、破ったことを思い出す。",
-    "青いペンで書いた文字が、少し滲んでいる。",
-    "朝の電車は、誰も目を合わせない。",
-    "本棚の隙間に、埃が溜まっていた。",
-    "短い夢から覚めて、長い余韻だけが残る。",
-    "封筒を開けずに、机の端に置いた。",
-    "夜更けの水道の音が、妙に澄んでいる。",
-    "時計の秒針だけが、仕事をしている。",
-    "言葉の温度を測るように、もう一度読み直す。",
-    "古いコートのポケットから、切符が出た。",
-    "空の色が、今日の気分に似ている。",
-    "誰かに話したくなる話を、誰にも話さない。",
-    "ページの角が丸くなっている。何度も開いた痕。",
-    "部屋の電気を消すと、外の光が強くなった。",
-    "同じ場所に立って、違うことを考えている。",
-    "指でなぞった文字が、跡にならない。",
-    "遠い花火の音が、遅れて届いた。",
-    "今日という日に、名前をつけてみた。",
-    "沈黙が続きすぎて、沈黙が話題になった。",
-    "窓ガラスに、自分の吐息が白く残る。",
-    "終わった話なのに、続きがある気がする。",
-    "最後の一文を書いて、ペンを置いた。"
-  ];
+  var DEFAULT_DIARIES = [];
 
   function normalizeDiaries(list) {
     var out = [];
@@ -2726,10 +2651,8 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     if (work && Array.isArray(work.diaries) && work.diaries.length) {
       return normalizeDiaries(work.diaries);
     }
-    // 未設定時はデフォルト短文を id 付きで返す（保存前の閲覧用）
-    return DEFAULT_DIARIES.map(function (t, i) {
-      return { id: "d" + i, text: t };
-    });
+    // 未設定時は空（少しずつ書き進める想定。デフォルト文は入れない）
+    return [];
   }
 
   function shuffleInPlace(arr) {
@@ -2796,13 +2719,25 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
   /**
    * 本文中の句読点から最大 DIARY_EGG_MAX 箇所をランダム抽選し、日記を割り当てる。
    * 位置は表示のたびに変わる。あとがき用の句点は除外。
+   * 編集・管理モード時は日記が空でも約100箇所を金色表示する（書き進める目印）。
    */
   function setupDiaryEggs(work) {
+    // 本文インライン編集中は contenteditable を壊さない
     if (document.body.classList.contains("is-editing")) return;
     var main = app.querySelector("#honbun");
     if (!main) return;
     var diaries = getWorkDiaries(work);
-    if (!diaries.length) return;
+    var managing = typeof isManaging === "function" && isManaging();
+
+    // 閲覧時かつ日記なし → 何もしない（少しずつ書く想定）
+    // 管理・編集モード時は日記がなくても位置を金色表示
+    if (!diaries.length && !managing) {
+      main.querySelectorAll(".diary-egg-dot").forEach(function (span) {
+        var t = document.createTextNode(span.textContent || "");
+        if (span.parentNode) span.parentNode.replaceChild(t, span);
+      });
+      return;
+    }
 
     // 既存ラップを解除（再入場時）
     main.querySelectorAll(".diary-egg-dot").forEach(function (span) {
@@ -2847,11 +2782,12 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     }
 
     shuffleInPlace(candidates);
-    var n = Math.min(DIARY_EGG_MAX, candidates.length, diaries.length);
+    // 各作品最大100箇所。日記数に依存せず、管理時は常に最大まで選ぶ
+    var n = Math.min(DIARY_EGG_MAX, candidates.length);
     var picked = candidates.slice(0, n);
 
     var diaryPool = diaries.slice();
-    shuffleInPlace(diaryPool);
+    if (diaryPool.length) shuffleInPlace(diaryPool);
 
     // 同一テキストノードごとに index 降順でまとめて置換（ノード分割の不整合を防ぐ）
     var byNode = [];
@@ -2884,26 +2820,33 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
         if (full.charAt(hit.index) !== hit.ch) return;
         var before = full.slice(0, hit.index);
         var after = full.slice(hit.index + 1);
-        var diary = diaryPool[hit.diaryIdx % diaryPool.length];
+        var diary = diaryPool.length ? diaryPool[hit.diaryIdx % diaryPool.length] : null;
         var span = document.createElement("span");
         span.className = "diary-egg-dot";
-        span.setAttribute("data-diary-id", diary.id);
-        span.setAttribute("data-diary-text", diary.text);
+        if (managing) span.classList.add("is-edit-mark");
+        if (diary) {
+          span.setAttribute("data-diary-id", diary.id);
+          span.setAttribute("data-diary-text", diary.text);
+        } else {
+          span.setAttribute("data-diary-id", "");
+          span.setAttribute("data-diary-text", "");
+        }
         span.setAttribute("role", "button");
         span.setAttribute("tabindex", "0");
         span.textContent = hit.ch;
         var parent = textNode.parentNode;
-        var afterNode = null;
         if (before) parent.insertBefore(document.createTextNode(before), textNode);
         parent.insertBefore(span, textNode);
         if (after) {
-          afterNode = document.createTextNode(after);
+          var afterNode = document.createTextNode(after);
           parent.insertBefore(afterNode, textNode);
         }
         parent.removeChild(textNode);
-        bindDiaryEggDot(span);
+        // テキストがある場合はタップ可能（管理画面でも確認用）
+        if (diary && diary.text) {
+          bindDiaryEggDot(span);
+        }
         // 同一ノード内でより手前の句読点は「before」側に残るため、次は before を対象にする
-        // index 降順なので after 側には未処理の句読点は無い。before を次の textNode に。
         textNode = before ? span.previousSibling : null;
         if (textNode && textNode.nodeType !== 3) textNode = null;
       });
@@ -2930,6 +2873,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       if (taps >= DIARY_EGG_TAPS_NEEDED) {
         taps = 0;
         var t = dot.getAttribute("data-diary-text") || "";
+        if (!t) return;
         openDiaryModal(t);
       }
     }
@@ -2965,7 +2909,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     box.style.overflowY = "auto";
 
     var html = "<h3>日記の編集</h3>";
-    html += '<p style="font-size:12px;color:var(--fg-dim);line-height:1.7;margin:0 0 14px;letter-spacing:0.04em;">閲覧時、本文中の句読点（。、など）から最大100箇所がランダムに選ばれ、3回タップで表示されます。位置は表示のたびに変わります。</p>';
+    html += '<p style="font-size:12px;color:var(--fg-dim);line-height:1.7;margin:0 0 14px;letter-spacing:0.04em;">最初は空です。少しずつ追加してください。<br>閲覧時、本文中の句読点（。、など）から最大100箇所がランダムに選ばれ、3回タップで表示されます。位置は表示のたびに変わります。<br>編集モード中は、選ばれた約100箇所の句読点が金色に光ります。</p>';
     html += '<div class="diary-editor-list" data-diary-list></div>';
     html += '<div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">';
     html += '<button type="button" class="btn" data-add-diary>+ 追加</button>';
