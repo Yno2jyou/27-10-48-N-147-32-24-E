@@ -2513,7 +2513,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       "<li>キャッチコピー5回 → 大雨のあと → キャッチコピーを <strong>3回</strong>タップ → 右上メニューに「FACTOR/TRADERへ」が出現</li>" +
       "<li>右上の三点メニューから「FACTOR/TRADERへ」をタップ → 素因数分解投資ゲームをプレイ</li>" +
       "<li><strong>作品の最終話</strong>本文の<strong>最後の句点「。」</strong>を <strong>5回</strong>タップ → その作品の<strong>あとがき</strong>が現れる</li>" +
-      "<li>本文中の<strong>句読点（。、）</strong>のうちランダムな約100箇所を <strong>3回</strong>タップ → <strong>短い日記</strong>が表示される（位置は表示のたびに変わる）</li>" +
+      "<li>本文中の<strong>句読点（。、）</strong>のうちランダムな約100箇所を <strong>3回</strong>タップ → <strong>日記</strong>が表示される（位置は表示のたびに変わる）</li>" +
       "<li>サイト／タブを閉じる → 解放状態がリセットされる</li>" +
       "</ol>" +
       "</div>" +
@@ -2945,7 +2945,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     });
   }
 
-  /** 編集画面：短い日記の一覧編集 */
+  /** 編集画面：日記の一覧編集 */
   function openDiaryEditorModal(work) {
     if (!work) return;
     var diaries = getWorkDiaries(work).map(function (d) {
@@ -2964,7 +2964,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     box.style.maxHeight = "88vh";
     box.style.overflowY = "auto";
 
-    var html = "<h3>短い日記の編集</h3>";
+    var html = "<h3>日記の編集</h3>";
     html += '<p style="font-size:12px;color:var(--fg-dim);line-height:1.7;margin:0 0 14px;letter-spacing:0.04em;">閲覧時、本文中の句読点（。、など）から最大100箇所がランダムに選ばれ、3回タップで表示されます。位置は表示のたびに変わります。</p>';
     html += '<div class="diary-editor-list" data-diary-list></div>';
     html += '<div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">';
@@ -3464,7 +3464,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       if (isManaging()) {
         html += '<button type="button" data-action="secret-guide">隠し要素</button>';
         if (!onHome) {
-          html += '<button type="button" data-action="edit-diaries">短い日記を編集</button>';
+          html += '<button type="button" data-action="edit-diaries">日記を編集</button>';
         }
       }
       html += '<button type="button" data-action="logout">ログアウト</button>';
@@ -4220,7 +4220,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       '<a href="#/" data-home data-edit-home>トップページへ</a>' +
       '<a href="#toc" data-edit-toc>目次</a>' +
       '<a href="#secret-guide" data-secret-guide>隠し要素</a>' +
-      '<a href="#edit-diaries" data-edit-diaries>短い日記</a>' +
+      '<a href="#edit-diaries" data-edit-diaries>日記</a>' +
       '</div>' +
       '<div class="hint">編集中 · 変更後は保存</div>' +
       '<div class="jump-wrap">' +
