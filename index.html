@@ -690,6 +690,20 @@ header .site-catchcopy.is-egg-pulse {
 .btn:hover { color: var(--fg); border-color: var(--accent-soft); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #060508; font-weight: 500; }
 .btn.primary:hover { opacity: 0.88; color: #060508; }
+
+/* ===== 特徴レーダーチャート ===== */
+.wmap-empty { padding: 40px 16px; text-align: center; color: var(--fg); opacity: .6; font-size: 13px; line-height: 2; border: 1px dashed var(--line); border-radius: 3px; }
+.wmap-section-desc { font-size: 12px; opacity: .75; line-height: 1.8; margin-bottom: 16px; }
+.wmap-radar-wrap { display: flex; flex-direction: column; gap: 18px; align-items: center; }
+.wmap-radar-svg { width: 100%; max-width: 460px; height: auto; overflow: visible; }
+.wmap-radar-ring { fill: none; stroke: var(--line); stroke-width: 1; }
+.wmap-radar-spoke { stroke: var(--line); stroke-width: 1; }
+.wmap-radar-axis-label { font-family: var(--font-body); font-size: 11px; letter-spacing: .04em; fill: var(--fg); opacity: .8; }
+.wmap-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: center; }
+.wmap-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg); opacity: .65; cursor: pointer; background: none; border: none; font-family: var(--font-body); padding: 3px 0; transition: opacity .2s; }
+.wmap-legend-item:hover, .wmap-legend-item.active { opacity: 1; }
+.wmap-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+#footer-radar-egg { cursor: default; }
 .modal-error { color: #ef4444; font-size: 12px; margin: -10px 0 16px; letter-spacing: 0.04em; }
 
 /* 保存完了トースト */
@@ -1158,6 +1172,23 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
   const WORKS_COL = collection(db, "site_works");
 
   const DEFAULTS = JSON.parse(document.getElementById("site-data").textContent);
+
+  /* ===== 特徴レーダーチャート：デフォルトデータ =====
+     LUNA3の「特徴レーダー」と同じ考え方。©2026を押すと表示される。
+     管理パネルから軸（3つ以上）・対象作品・数値(0-100)を編集できる。 */
+  const DEFAULT_RADAR = {
+    title: "特徴レーダー",
+    desc: "いくつかのテーマ軸から、各作品の特徴を多角形で表します。",
+    axes: [
+      { id: "a1", label: "心理描写" },
+      { id: "a2", label: "思弁性" },
+      { id: "a3", label: "物語性" },
+      { id: "a4", label: "幻想性" },
+      { id: "a5", label: "余韻" }
+    ],
+    workIds: [],
+    values: {}
+  };
 
   /* 隠し作品：管理画面の「隠し」で secret:true にした作品が対象 */
   function isSecretUnlocked() {
@@ -1822,7 +1853,9 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     if (!isAdmin()) return;
     var metaSnap = await getDoc(META_REF);
     if (!metaSnap.exists()) {
-      await setDoc(META_REF, { site: DEFAULTS.site, theme: { bg: "#060508", fg: "#e6e2dc", accent: "#9a8b7a" } });
+      await setDoc(META_REF, { site: DEFAULTS.site, theme: { bg: "#060508", fg: "#e6e2dc", accent: "#9a8b7a" }, radar: DEFAULT_RADAR });
+    } else if (!("radar" in metaSnap.data())) {
+      await updateDoc(META_REF, { radar: DEFAULT_RADAR });
     }
     var worksSnap = await getDocs(WORKS_COL);
     if (worksSnap.empty) {
@@ -1875,7 +1908,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       var worksSnap = await withTimeout(getDocs(WORKS_COL), 10000, "works");
       if (!metaSnap.exists() || worksSnap.empty) {
         // Firestoreがまだ空（未ログイン状態で初回アクセスなど）
-        cache = { site: DEFAULTS.site, theme: { bg: "#060508", fg: "#e6e2dc", accent: "#9a8b7a" }, works: DEFAULTS.works.map(function (w) {
+        cache = { site: DEFAULTS.site, theme: { bg: "#060508", fg: "#e6e2dc", accent: "#9a8b7a" }, radar: DEFAULT_RADAR, works: DEFAULTS.works.map(function (w) {
           return Object.assign({}, w, { published: w.published !== false });
         }) };
         return cache;
@@ -1892,12 +1925,13 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       cache = {
         site: Object.assign({ title: "", subtitle: "", epigraph: "", catchcopy: "", subcopy: "" }, meta.site || {}),
         theme: meta.theme,
+        radar: Object.assign({}, DEFAULT_RADAR, meta.radar || {}),
         works: works
       };
       return cache;
     } catch (e) {
       console.warn("読み込みに失敗、初期データを表示します:", e);
-      cache = { site: DEFAULTS.site, theme: { bg: "#060508", fg: "#e6e2dc", accent: "#9a8b7a" }, works: DEFAULTS.works.map(function (w) {
+      cache = { site: DEFAULTS.site, theme: { bg: "#060508", fg: "#e6e2dc", accent: "#9a8b7a" }, radar: DEFAULT_RADAR, works: DEFAULTS.works.map(function (w) {
         return Object.assign({}, w, { published: w.published !== false });
       }) };
       return cache;
@@ -1910,6 +1944,11 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
   }
   async function saveTheme(partial) {
     await updateDoc(META_REF, { theme: Object.assign({}, cache.theme, partial) });
+  }
+  async function saveRadar(partial) {
+    var next = Object.assign({}, cache.radar, partial);
+    await updateDoc(META_REF, { radar: next });
+    cache.radar = next;
   }
   async function saveWork(id, partial) {
     await updateDoc(doc(db, "site_works", id), partial);
@@ -2250,6 +2289,7 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       html += adminBar(
         '<button class="btn" data-action="edit-site">' + t("editSite") + '</button>' +
         '<button class="btn" data-action="edit-theme">' + t("editTheme") + '</button>' +
+        '<button class="btn" data-action="edit-radar">特徴レーダーを編集</button>' +
         '<button class="btn primary" data-action="add-work">' + t("addWork") + '</button>' +
         '<button class="btn" data-action="logout">' + t("logout") + '</button>'
       );
@@ -2288,8 +2328,15 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
       html += '</div>';
     });
     html += '</div></main>';
-    html += '<footer><p>' + esc(data.site.title) + '</p><p>&copy; 2026</p></footer>';
+    html += '<footer><p>' + esc(data.site.title) + '</p><p><span id="footer-radar-egg" data-action="show-radar">&copy; 2026</span></p></footer>';
     app.innerHTML = html;
+
+    var radarEggEl = app.querySelector("#footer-radar-egg");
+    if (radarEggEl) {
+      radarEggEl.addEventListener("click", function () {
+        openRadarChartModal(data);
+      });
+    }
 
     if (isManaging()) attachHomeAdminHandlers(data);
     app.querySelectorAll(".work-card").forEach(function (card) {
@@ -3407,6 +3454,228 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
     });
   }
 
+  /* ===== 特徴レーダーチャート：表示用SVG生成 ===== */
+  function buildRadarSVG(axes, works, values, activeId, PALETTE) {
+    var W = 520, H = 520, cx = W / 2, cy = H / 2, R = Math.min(W, H) / 2 - 70;
+    function angleFor(i) { return -Math.PI / 2 + i * (2 * Math.PI / axes.length); }
+    function ptFor(i, val) {
+      var r = (Math.max(0, Math.min(100, val || 0)) / 100) * R;
+      var a = angleFor(i);
+      return (cx + r * Math.cos(a)) + "," + (cy + r * Math.sin(a));
+    }
+    var svg = '<svg class="wmap-radar-svg" viewBox="0 0 ' + W + ' ' + H + '" width="100%">';
+    [0.25, 0.5, 0.75, 1].forEach(function (r) {
+      var poly = axes.map(function (_, i) {
+        var a = angleFor(i);
+        return (cx + R * r * Math.cos(a)) + "," + (cy + R * r * Math.sin(a));
+      }).join(" ");
+      svg += '<polygon points="' + poly + '" class="wmap-radar-ring"></polygon>';
+    });
+    axes.forEach(function (ax, i) {
+      var a = angleFor(i);
+      var lx = cx + (R + 22) * Math.cos(a), ly = cy + (R + 22) * Math.sin(a);
+      svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + (cx + R * Math.cos(a)) + '" y2="' + (cy + R * Math.sin(a)) + '" class="wmap-radar-spoke"></line>';
+      svg += '<text x="' + lx + '" y="' + ly + '" class="wmap-radar-axis-label" text-anchor="middle">' + esc(ax.label || "") + '</text>';
+    });
+    works.forEach(function (w, si) {
+      if (activeId && activeId !== w.id) return;
+      var vals = (values || {})[w.id] || {};
+      var poly = axes.map(function (ax, i) { return ptFor(i, vals[ax.id]); }).join(" ");
+      var color = PALETTE[si % PALETTE.length];
+      svg += '<polygon points="' + poly + '" fill="' + color + '" fill-opacity="' + (activeId ? 0.22 : 0.12) + '" stroke="' + color + '" stroke-width="' + (activeId ? 2.2 : 1.4) + '"></polygon>';
+    });
+    svg += '</svg>';
+    return svg;
+  }
+
+  var RADAR_PALETTE = ["#c8a86a", "#8b5cf6", "#f59e0b", "#38bdf8", "#f87171", "#4ade80", "#f472b6"];
+
+  /* ===== 特徴レーダーチャート：閲覧モーダル（©2026を押すと開く） ===== */
+  function openRadarChartModal(data) {
+    var radar = data.radar || DEFAULT_RADAR;
+    var axes = radar.axes || [];
+    var byId = {};
+    (data.works || []).forEach(function (w) { byId[w.id] = w; });
+    var works = (radar.workIds || []).map(function (id) { return byId[id]; }).filter(Boolean);
+    var activeId = null;
+
+    var existing = document.querySelector(".modal-overlay.radar-chart-overlay");
+    if (existing) existing.remove();
+    var overlay = document.createElement("div");
+    overlay.className = "modal-overlay radar-chart-overlay";
+    var box = document.createElement("div");
+    box.className = "modal-box radar-chart-modal";
+    box.style.maxWidth = "600px";
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    function renderBody() {
+      var html = "<h3>" + esc(radar.title || "特徴レーダー") + "</h3>";
+      if (radar.desc) html += '<p class="wmap-section-desc">' + esc(radar.desc) + '</p>';
+      if (axes.length < 3 || works.length === 0) {
+        html += '<p class="wmap-empty">レーダーチャートを表示するには、管理パネルで軸（3つ以上）と作品を登録してください。</p>';
+      } else {
+        html += '<div class="wmap-radar-wrap">';
+        html += buildRadarSVG(axes, works, radar.values, activeId, RADAR_PALETTE);
+        html += '<div class="wmap-legend">';
+        html += '<button class="wmap-legend-item' + (activeId ? '' : ' active') + '" data-active-id="">すべて重ねて表示</button>';
+        works.forEach(function (w, si) {
+          html += '<button class="wmap-legend-item' + (activeId === w.id ? ' active' : '') + '" data-active-id="' + esc(w.id) + '"><span class="wmap-legend-dot" style="background:' + RADAR_PALETTE[si % RADAR_PALETTE.length] + '"></span>' + esc(w.title) + '</button>';
+        });
+        html += '</div></div>';
+      }
+      html += '<div class="modal-actions" style="margin-top:20px;"><button class="btn primary" data-close>閉じる</button></div>';
+      box.innerHTML = html;
+      box.querySelector("[data-close]").addEventListener("click", close);
+      box.querySelectorAll(".wmap-legend-item").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          activeId = btn.getAttribute("data-active-id") || null;
+          renderBody();
+        });
+      });
+    }
+    function close() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+    renderBody();
+  }
+
+  /* ===== 特徴レーダーチャート：管理パネル編集モーダル ===== */
+  function openRadarEditModal(data) {
+    var draft = JSON.parse(JSON.stringify(data.radar || DEFAULT_RADAR));
+    if (!draft.axes) draft.axes = [];
+    if (!draft.workIds) draft.workIds = [];
+    if (!draft.values) draft.values = {};
+
+    var existing = document.querySelector(".modal-overlay.radar-edit-overlay");
+    if (existing) existing.remove();
+    var overlay = document.createElement("div");
+    overlay.className = "modal-overlay radar-edit-overlay";
+    var box = document.createElement("div");
+    box.className = "modal-box radar-edit-modal";
+    box.style.maxWidth = "680px";
+    box.style.maxHeight = "84vh";
+    box.style.overflowY = "auto";
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    function uid() { return "a" + Math.random().toString(36).slice(2, 8); }
+
+    function render() {
+      var html = "<h3>特徴レーダーを編集</h3>";
+      html += '<label>セクションタイトル</label>';
+      html += '<input type="text" data-field="title" value="' + esc(draft.title || "") + '" style="width:100%;background:#050406;border:1px solid var(--line);color:var(--fg);padding:8px 10px;font-family:var(--font-body);font-size:13px;margin-bottom:12px;" />';
+      html += '<label>補足説明</label>';
+      html += '<textarea data-field="desc" rows="2" style="width:100%;background:#050406;border:1px solid var(--line);color:var(--fg);padding:8px 10px;font-family:var(--font-body);font-size:13px;margin-bottom:16px;">' + esc(draft.desc || "") + '</textarea>';
+
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;"><strong style="font-size:13px;">テーマ軸（' + draft.axes.length + '）</strong><button class="btn" data-add-axis type="button">＋ 軸を追加</button></div>';
+      if (!draft.axes.length) {
+        html += '<p style="font-size:12px;opacity:.7;">まだ軸が登録されていません（3つ以上を推奨）</p>';
+      } else {
+        draft.axes.forEach(function (ax) {
+          html += '<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);">' +
+            '<input type="text" data-axis-label="' + esc(ax.id) + '" value="' + esc(ax.label || "") + '" placeholder="軸の名前" style="flex:1;background:#050406;border:1px solid var(--line);color:var(--fg);padding:6px 8px;font-size:13px;" />' +
+            '<button class="btn" data-del-axis="' + esc(ax.id) + '" type="button">削除</button>' +
+            '</div>';
+        });
+      }
+
+      html += '<div style="margin:20px 0 8px;"><strong style="font-size:13px;">表示する作品（' + draft.workIds.length + '）</strong></div>';
+      (data.works || []).forEach(function (w) {
+        var checked = draft.workIds.indexOf(w.id) !== -1;
+        html += '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;">' +
+          '<input type="checkbox" data-toggle-work="' + esc(w.id) + '"' + (checked ? " checked" : "") + ' /> ' + esc(w.title) +
+          '</label>';
+      });
+
+      if (draft.workIds.length && draft.axes.length) {
+        html += '<div style="margin-top:20px;overflow-x:auto;"><strong style="font-size:13px;">各作品の数値（0〜100）</strong>';
+        html += '<table style="width:100%;border-collapse:collapse;margin-top:8px;">';
+        html += '<thead><tr><th style="text-align:left;font-size:11px;padding:6px;border-bottom:1px solid var(--line);">作品</th>';
+        draft.axes.forEach(function (ax) { html += '<th style="text-align:left;font-size:11px;padding:6px;border-bottom:1px solid var(--line);">' + esc(ax.label || "軸") + '</th>'; });
+        html += '</tr></thead><tbody>';
+        draft.workIds.forEach(function (wid) {
+          var w = (data.works || []).filter(function (x) { return x.id === wid; })[0];
+          if (!w) return;
+          html += '<tr><td style="padding:6px;font-size:12px;white-space:nowrap;">' + esc(w.title) + '</td>';
+          draft.axes.forEach(function (ax) {
+            var v = (draft.values[wid] || {})[ax.id];
+            if (v === undefined) v = 50;
+            html += '<td style="padding:6px;min-width:130px;"><input type="range" min="0" max="100" value="' + v + '" data-value-work="' + esc(wid) + '" data-value-axis="' + esc(ax.id) + '" style="width:90px;vertical-align:middle;" /> <span style="font-size:11px;">' + v + '</span></td>';
+          });
+          html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+      }
+
+      html += '<div class="modal-actions" style="margin-top:20px;"><button class="btn" data-close type="button">キャンセル</button><button class="btn primary" data-save type="button">保存</button></div>';
+      box.innerHTML = html;
+      bind();
+    }
+
+    function bind() {
+      box.querySelector("[data-close]").addEventListener("click", close);
+      box.querySelector('[data-field="title"]').addEventListener("input", function () { draft.title = this.value; });
+      box.querySelector('[data-field="desc"]').addEventListener("input", function () { draft.desc = this.value; });
+      box.querySelector("[data-add-axis]").addEventListener("click", function () {
+        draft.axes.push({ id: uid(), label: "新しい軸" });
+        render();
+      });
+      box.querySelectorAll("[data-del-axis]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-del-axis");
+          draft.axes = draft.axes.filter(function (a) { return a.id !== id; });
+          Object.keys(draft.values).forEach(function (wid) {
+            if (draft.values[wid]) delete draft.values[wid][id];
+          });
+          render();
+        });
+      });
+      box.querySelectorAll("[data-axis-label]").forEach(function (input) {
+        input.addEventListener("change", function () {
+          var id = input.getAttribute("data-axis-label");
+          var ax = draft.axes.filter(function (a) { return a.id === id; })[0];
+          if (ax) ax.label = input.value;
+        });
+      });
+      box.querySelectorAll("[data-toggle-work]").forEach(function (cb) {
+        cb.addEventListener("change", function () {
+          var id = cb.getAttribute("data-toggle-work");
+          var idx = draft.workIds.indexOf(id);
+          if (cb.checked && idx === -1) draft.workIds.push(id);
+          else if (!cb.checked && idx !== -1) draft.workIds.splice(idx, 1);
+          render();
+        });
+      });
+      box.querySelectorAll("[data-value-work]").forEach(function (range) {
+        range.addEventListener("input", function () {
+          var wid = range.getAttribute("data-value-work");
+          var aid = range.getAttribute("data-value-axis");
+          if (!draft.values[wid]) draft.values[wid] = {};
+          draft.values[wid][aid] = Number(range.value);
+          var label = range.nextElementSibling;
+          if (label) label.textContent = range.value;
+        });
+      });
+      box.querySelector("[data-save]").addEventListener("click", async function () {
+        var saveBtn = box.querySelector("[data-save]");
+        saveBtn.textContent = "保存中...";
+        saveBtn.disabled = true;
+        try {
+          await saveRadar(draft);
+          close();
+          await refresh();
+        } catch (e) {
+          alert("保存に失敗しました: " + (e && e.message ? e.message : e));
+          saveBtn.textContent = "保存";
+          saveBtn.disabled = false;
+        }
+      });
+    }
+    function close() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+    render();
+  }
+
   function attachHomeAdminHandlers(data) {
     var logoutBtn = app.querySelector('[data-action="logout"]');
     if (logoutBtn) logoutBtn.addEventListener("click", function () {
@@ -3452,6 +3721,11 @@ main#honbun.is-editing .chapter-edit-body > p.no-indent { text-indent: 0; }
           return saveWork(id, result);
         });
       });
+    });
+
+    var editRadarBtn = app.querySelector('[data-action="edit-radar"]');
+    if (editRadarBtn) editRadarBtn.addEventListener("click", function () {
+      openRadarEditModal(data);
     });
 
     var addWorkBtn = app.querySelector('[data-action="add-work"]');
